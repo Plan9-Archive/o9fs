@@ -1,0 +1,21 @@
+Notes about v9fs internals:
+
+the code entry point is v9fs_get_sb().
+
+v9fs_get_sb()
+	call v9fs_session_init() to properly initialize the v9ses
+
+	v9fs_session_init()
+		fill user name and remote user name (aname) with defaults
+		call v9fs_parse_options() with options from mount syscall
+		v9fs_parse_options()
+			fill v9ses options
+		setup session dependent pools (fids and tags)
+		setup protocol specific transport
+		call protocolo specific init for estabilishing the proper connection
+		initialize mux (multiplexor)
+		issue Tversion message
+		set msize as Rversion one
+		get newfid from fid pool
+		issue Tattach with newfid
+

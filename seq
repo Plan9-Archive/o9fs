@@ -1,0 +1,19 @@
+mount:
+mount
+	root
+statfs
+ls mountpoint:
+root
+getattr
+root
+access
+open
+getattr
+readdir
+root
+access
+open
+getattr
+getattr
+access
+readdir
