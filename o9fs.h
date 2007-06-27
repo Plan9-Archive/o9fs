@@ -1,17 +1,43 @@
 /* based on src/lib9pclient/fsimpl.h and include/fcall.h from p9p */
 
+/* 9p specific info */
+struct o9fs {
+	char version[7];			/* we only support 9P2000 anyway */
+	int msize;
+	int ref;
+	int fd;
+	int nextfid;
+	struct o9fsfid *root;
+	struct o9fsfid *freefid;
+
+#ifdef KERNEL
+	struct simple_lock lock;	/* XXX is this the correct lock? */
+#endif
+};
+
+struct o9fsmount;
+
+struct o9fs_io {
+	int	(*open) (struct o9fsmount *);
+	int	(*write) (struct o9fsmount *, struct uio *);
+	int	(*read) (struct o9fsmount *, struct uio *);
+	int	(*close) (struct o9fsmount *);
+};
+
+extern struct o9fs_io io_tcp;
+
+/* o9fs session */
 struct o9fsmount {
-	struct	mount *om_mp;
+	struct	mount *om_mp;		/* generic mount info */
 	struct	o9fsnode *om_root;	/* local root of the tree */
-	struct	file *om_srv;
+	struct	o9fs	*om_o9fs;	/* 9P info */
 
 	/* for use by transport routines */
-	struct sockaddr *om_saddr;	/* server address */
-	size_t om_saddrlen;			/* saddr size */
-	struct socket *om_so;		/* socket to server */
-
-	int		msize;
-	
+	struct	o9fs_io *io;		/* io routines */
+	struct	sockaddr *om_saddr;	/* server address */
+	size_t	om_saddrlen;		/* saddr size */
+	struct	socket *om_so;		/* socket to server */
+	sa_family_t	om_sotype;		/* socket type */
 };
 
 /* directory entry */
@@ -51,27 +77,9 @@ struct o9fsfid {
 	struct o9fsfid *next;
 };
 
-struct o9fs_io {
-	int (*open) (struct o9fs *);
-	int (*write) (struct o9fs *, struct uio *);
-	int (*read) (struct o9fs *, struct uio *);
-	int (*close) (struct o9fs *);
-};
 
-/* 9p session */
-struct o9fs {
-	char version[7];			/* we only support 9P2000 anyway */
-	int msize;
-	int ref;
-	int fd;
-	int nextfid;
-	struct o9fsfid *root;
-	struct o9fsfid *freefid;
 
-#ifdef KERNEL
-	struct simple_lock lock;	/* XXX is this the correct lock? */
-#endif
-};
+
 
 #define VTO9(vp) ((struct o9fsnode *)(vp)->v_data)
 #define VFSTOO9FS(mp) ((struct o9fsmount *)((mp)->mnt_data))
