@@ -27,7 +27,7 @@ void *
 o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {
 	int n, nn, error;
-	void *tpk;
+	void *tpkt;
 	u_char buf[4], *rpkt;
 	struct uio auio;
 	struct iovec aiov;
@@ -42,14 +42,12 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	if (tpkt == NULL)
 		return (NULL);
 	
-	printf("b: %s\n", tx->version);
 	nn = o9fs_convS2M(tx, tpkt, n);
 	if (nn != n) {
 		free(tpkt, M_TEMP);
 		printf("size mismatch\n");
 		return (NULL);
 	}
-	printf("a: %s\n", tx->version);
 
 	aiov.iov_base = tpkt;
 	aiov.iov_len = auio.uio_resid = n;

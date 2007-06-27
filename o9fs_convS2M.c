@@ -6,8 +6,7 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-static
-u_char*
+static u_char *
 pstring(u_char *p, char *s)
 {
 	u_int n;
@@ -21,13 +20,12 @@ pstring(u_char *p, char *s)
 	n = strlen(s);
 	O9FS_PBIT16(p, n);
 	p += O9FS_BIT16SZ;
-	bcopy(p, s, n);
+	bcopy(s, p, n);
 	p += n;
 	return (p);
 }
 
-static
-u_char*
+static u_char *
 pqid(u_char *p, struct o9fsqid *q)
 {
 	O9FS_PBIT8(p, q->type);
@@ -39,8 +37,7 @@ pqid(u_char *p, struct o9fsqid *q)
 	return (p);
 }
 
-static
-u_int
+static u_int
 stringsz(char *s)
 {
 	if(s == NULL)
@@ -307,7 +304,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		p += O9FS_BIT64SZ;
 		O9FS_PBIT32(p, f->count);
 		p += O9FS_BIT32SZ;
-		bcopy(p, f->data, f->count);
+		bcopy(f->data, p, f->count);
 		p += f->count;
 		break;
 
@@ -327,7 +324,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		p += O9FS_BIT32SZ;
 		O9FS_PBIT16(p, f->nstat);
 		p += O9FS_BIT16SZ;
-		bcopy(p, f->stat, f->nstat);
+		bcopy(f->stat, p, f->nstat);
 		p += f->nstat;
 		break;
 /*
@@ -382,7 +379,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 	case O9FS_RREAD:
 		O9FS_PBIT32(p, f->count);
 		p += O9FS_BIT32SZ;
-		bcopy(p, f->data, f->count);
+		bcopy(f->data, p, f->count);
 		p += f->count;
 		break;
 
@@ -400,7 +397,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 	case O9FS_RSTAT:
 		O9FS_PBIT16(p, f->nstat);
 		p += O9FS_BIT16SZ;
-		bcopy(p, f->stat, f->nstat);
+		bcopy(f->stat, p, f->nstat);
 		p += f->nstat;
 		break;
 

@@ -19,7 +19,7 @@ gstring(u_char *p, u_char *ep, char **s)
 	if (p+n+1 > ep)
 		return (NULL);
 	/* move it down, on top of count, to make room for '\0' */
-	bcopy(p, p + 1, n);
+	bcopy(p + 1, p, n);
 	p[n] = '\0';
 	*s = (char*)p;
 	p += n+1;

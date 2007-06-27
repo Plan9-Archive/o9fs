@@ -107,7 +107,6 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	tx.version = "9P2000";
 	tx.msize = 8192;
 
-	printf("%s\n", tx.version);
 	o9fs_rpc(mntp, &tx, &rx);
 
 	return (error);
