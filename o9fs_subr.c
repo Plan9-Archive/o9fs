@@ -21,78 +21,17 @@
 
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
-/*
-int
-o9fs_connect(struct o9fsmount *mntp)
-{
-	struct socket *so;
-	struct sockaddr *saddr;
-	struct sockaddr_in *sin;
-	int s, error;
 
-	mntp->om_so = (struct socket *)0;
-	saddr = mtod(mntp->om_nam, struct sockaddr *);
-	
-	sin = mtod(mntp->om_nam, struct sockaddr_in *);
-	printf("addr = %s\n", inet_ntoa(sin->sin_addr));
-	
-	error = socreate(AF_INET, &mntp->om_so, SOCK_STREAM, IPPROTO_TCP);
-	if (error)
-		goto bad;
-	printf("socket created\n");
-
-	so = mntp->om_so;
-	
-	error = soconnect(so, mntp->om_nam);
-	if (error) {
-		printf("bad connect\n");
-		goto bad;
-	}
-
-	 from sys_connect() 
-	s = splsoftnet();
-	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-		error = tsleep(&so->so_timeo, PSOCK | PCATCH, netcon, 0);
-		if (error)
-			break;
-	}
-	if (error == 0) {
-		error = so->so_error;
-		so->so_error = 0;
-	}
-	splx(s);
-	return (0);
-
-bad:
-	o9fs_disconnect(mntp);
-	return (error);
-} */
-
-void
-o9fs_disconnect(struct o9fsmount *mntp)
-{
-	struct socket *so;
-	
-	if (mntp->om_so) {
-		so = mntp->om_so;
-		mntp->om_so = (struct socket *)0;
-		soshutdown(so, 2);
-		soclose(so);
-	}
-}
 
 void *
-o9fs_rpc(struct socket *so, struct o9fsfcall *tx, struct o9fsfcall *rx)
+o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {
 	int n, nn, error;
-	void *tpkt;
-/*	u_char buf[4], *rpkt; */
-	struct uio uio;
-	struct iovec iov;
+	void *tpk;
+	u_char buf[4], *rpkt;
+	struct uio auio;
+	struct iovec aiov;
 	struct proc *p;
-/*	struct socket *so;
-	struct sockaddr_in sa;
-	struct mbuf *nam; */
 	
 	p = curproc;
 	error = 0;
@@ -103,30 +42,74 @@ o9fs_rpc(struct socket *so, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	if (tpkt == NULL)
 		return (NULL);
 	
+	printf("b: %s\n", tx->version);
 	nn = o9fs_convS2M(tx, tpkt, n);
 	if (nn != n) {
 		free(tpkt, M_TEMP);
 		printf("size mismatch\n");
 		return (NULL);
 	}
+	printf("a: %s\n", tx->version);
 
-	iov.iov_base = tpkt;
-	iov.iov_len = uio.uio_resid = n;
-	uio.uio_iov = &iov;
-	uio.uio_iovcnt = 1;
-	uio.uio_offset = 0;
-	uio.uio_segflg = UIO_SYSSPACE;
-	uio.uio_rw = UIO_WRITE;
-	uio.uio_procp = p;
-	
-	error = sosend(so, (struct mbuf *)0, &uio, 
-					(struct mbuf *)0, (struct mbuf *)0, 0);
-	if (error != 0) {
+	aiov.iov_base = tpkt;
+	aiov.iov_len = auio.uio_resid = n;
+	auio.uio_iov = &aiov;
+	auio.uio_iovcnt = 1;
+	auio.uio_offset = 0;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_rw = UIO_WRITE;
+	auio.uio_procp = p;
+
+	error = omnt->io->write(omnt, &auio);
+	if (error) {
 		printf("failed sending 9p message\n");
 		return (NULL);
 	}
 
-	return ((void *)1);
+	/* get msg size */
+	aiov.iov_base = buf;
+	aiov.iov_len = auio.uio_resid = 4;
+	auio.uio_iov = &aiov;
+	auio.uio_iovcnt = 1;
+	auio.uio_rw = UIO_READ;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_procp = p;
+
+	omnt->io->read(omnt, &auio);
+	if (error) {
+		printf("receive error\n");
+		return (NULL);
+	}
+
+	nn = O9FS_GBIT32(buf);
+	printf("msg size %d\n", nn);
+	rpkt = (void *) malloc(nn + 4, M_TEMP, M_WAITOK);
+
+	/* read the rest of the msg */
+	O9FS_PBIT32(rpkt, nn);
+
+	aiov.iov_base = rpkt + 4;
+	aiov.iov_len = auio.uio_resid = nn -4;
+	auio.uio_iov = &aiov;
+	auio.uio_iovcnt = 1;
+	auio.uio_rw = UIO_READ;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_procp = p;
+	
+	error = omnt->io->read(omnt, &auio);
+	if (error) {
+		printf("receive error\n");
+		return (NULL);
+	}
+
+	n = O9FS_GBIT32((u_char *)rpkt);
+	nn = o9fs_convM2S(rpkt, n, rx);
+	if (nn != n) {
+		free(rpkt, M_TEMP);
+		return (NULL);
+	}
+
+	return (rpkt);
 }
 	
 	

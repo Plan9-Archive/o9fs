@@ -14,8 +14,9 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
+
 int
-o9fs_tcp_open(struct o9fsmount *mp)
+o9fs_tcp_open(struct o9fsmount *omnt)
 {
 	struct socket *so;
 	struct mbuf *nam;
@@ -25,7 +26,7 @@ o9fs_tcp_open(struct o9fsmount *mp)
 	int error, s;
 
 	so = (struct socket *) malloc(sizeof(struct socket), M_TEMP, M_WAITOK);
-	error = sockargs(&nam, mp->om_saddr, mp->om_saddrlen, MT_SONAME);
+	error = sockargs(&nam, omnt->om_saddr, omnt->om_saddrlen, MT_SONAME);
 	if (error)
 		return (error);
 	printf("MT_SONAME set\n");
@@ -35,7 +36,7 @@ o9fs_tcp_open(struct o9fsmount *mp)
 
 	sin = (struct sockaddr_in *) saddr;
 	str = inet_ntoa(sin->sin_addr);
-		printf("%s\n", str);
+	printf("%s\n", str);
 
 	error = socreate(PF_INET, &so, SOCK_STREAM, IPPROTO_TCP);
 	if (error)
@@ -71,7 +72,7 @@ o9fs_tcp_open(struct o9fsmount *mp)
 	}
 	splx(s);
 	
-	mp->om_so = so;
+	omnt->om_so = so;
 	return (error);
 
 bad:
@@ -83,3 +84,45 @@ bad:
 	}
 	return (error);
 }
+
+int
+o9fs_tcp_write(struct o9fsmount *omnt, struct uio *uio)
+{
+	struct socket *so;
+	int error;
+
+	if ((omnt == NULL) || (uio == NULL))
+		return (EINVAL);
+
+	so = omnt->om_so;
+
+	error = sosend(so, (struct mbuf *)0, uio,
+					(struct mbuf *)0, (struct mbuf *)0, 0);
+
+	/* XXX shouldn't we return the # of bytes written? */
+	return (error);
+}
+	
+int
+o9fs_tcp_read(struct o9fsmount *omnt, struct uio *uio)
+{
+	struct socket *so;
+	int error;
+
+	if ((omnt == NULL) || (uio == NULL))
+		return (EINVAL);
+
+	so = omnt->om_so;
+
+	error = soreceive(so, (struct mbuf **)0, uio,
+					(struct mbuf **)0, (struct mbuf **)0, 0);
+
+	/* XXX shouldn't we return the # of bytes read? */
+	return (error);
+}
+
+struct o9fs_io io_tcp = {
+	.open	= o9fs_tcp_open,
+	.write	= o9fs_tcp_write,
+	.read	= o9fs_tcp_read,
+};

@@ -90,6 +90,9 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	mntp->om_mp = mp;
 	mntp->om_saddr = args->saddr;
 	mntp->om_saddrlen = args->saddrlen;
+	
+	/* XXX io must be transparent */
+	mntp->io = &io_tcp;
 
 	mp->mnt_data = (qaddr_t) mntp;
 	vfs_getnewfsid(mp);
@@ -103,7 +106,9 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	tx.type = O9FS_TVERSION;
 	tx.version = "9P2000";
 	tx.msize = 8192;
-	o9fs_rpc(mntp->om_so, &tx, &rx);
+
+	printf("%s\n", tx.version);
+	o9fs_rpc(mntp, &tx, &rx);
 
 	return (error);
 }

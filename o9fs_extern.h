@@ -6,10 +6,12 @@ int o9fs_create_file(struct vnode *, struct vnode **, struct vattr *, struct com
 void o9fs_dir_attach(struct vnode *, struct o9fsdirent *);
 struct o9fsdirent *o9fs_dir_lookup(struct o9fsnode *, struct componentname *);
 void o9fs_disconnect(struct o9fsmount *);
-void *o9fs_rpc(struct socket *, struct o9fsfcall *, struct o9fsfcall *);
+void *o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);
 
 /* o9fs_io.c */
 int		o9fs_tcp_open(struct o9fsmount *);
+int		o9fs_tcp_write(struct o9fsmount *, struct uio *);
+int		o9fs_tcp_read(struct o9fsmount *, struct uio *);
 
 /* o9fs_conv*.c */
 u_int	o9fs_convM2S(u_char*, u_int, struct o9fsfcall*);
