@@ -1,5 +1,7 @@
 /* based on src/lib9pclient/fsimpl.h and include/fcall.h from p9p */
 
+#include <sys/pool.h>
+
 /* 9p specific info */
 struct o9fs {
 	char version[7];			/* we only support 9P2000 anyway */
@@ -8,7 +10,8 @@ struct o9fs {
 	int fd;
 	int nextfid;
 	struct o9fsfid *root;
-	struct o9fsfid *freefid;
+//	struct o9fsfid *freefid;
+	struct pool	freefid;
 
 #ifdef KERNEL
 	struct simple_lock lock;	/* XXX is this the correct lock? */
@@ -30,7 +33,7 @@ extern struct o9fs_io io_tcp;
 struct o9fsmount {
 	struct	mount *om_mp;		/* generic mount info */
 	struct	o9fsnode *om_root;	/* local root of the tree */
-	struct	o9fs	*om_o9fs;	/* 9P info */
+	struct	o9fs	om_o9fs;	/* 9P info */
 
 	/* for use by transport routines */
 	struct	o9fs_io *io;		/* io routines */
@@ -42,7 +45,7 @@ struct o9fsmount {
 
 /* directory entry */
 struct o9fsdirentx {
-	TAILQ_ENTRY(o9fsdirentx)		od_entries;
+	TAILQ_ENTRY(o9fsdirentx)	od_entries;
 	u_long						od_namelen;
 	char						od_name[MNAMELEN];
 	struct o9fsnode				*od_node;	/* node dirent refers to */

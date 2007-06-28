@@ -2,19 +2,12 @@
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/file.h>
-#include <sys/filedesc.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/mbuf.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/un.h>
 
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
@@ -67,6 +60,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	struct vnode *rvp;
 	struct o9fsfcall tx, rx;
 	struct o9fsdir *dir;
+	struct o9fsfid *fid;
 	int error, n;
 
 	error = 0;
@@ -91,6 +85,9 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_mp = mp;
 	omnt->om_saddr = args->saddr;
 	omnt->om_saddrlen = args->saddrlen;
+;
+	pool_init(&omnt->om_o9fs.freefid, sizeof(struct o9fsfid), 
+		0, 0, 0, "o9fsfid", &pool_allocator_nointr);
 	
 	/* XXX io must be transparent */
 	omnt->io = &io_tcp;
@@ -101,30 +98,20 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
 	bcopy(node, mp->mnt_stat.f_mntonname, MNAMELEN);
 
-	error = o9fs_tcp_open(omnt);
+	error = omnt->io->open(omnt);
 
-	/* version */
-	tx.type = O9FS_TVERSION;
-	tx.tag = O9FS_NOTAG;
-	tx.version = "9P2000";
-	tx.msize = 8192;
-
-	o9fs_rpc(omnt, &tx, &rx);
-
-	/* attach */
-	tx.type = O9FS_TATTACH;
-	tx.tag = 0;
-	tx.afid = O9FS_NOFID;
-	tx.fid = 0;
-	tx.uname = "iru";
-	tx.aname = "";
-
-	o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_tversion(omnt, 8192, "9P2000");
+	if (error)
+		return (error);
+		
+	fid = o9fs_tattach(omnt, 0, "iru", 0);
+	if (fid == NULL)
+		return (EIO);
 
 	/* stat on root */
 	tx.type = O9FS_TSTAT;
 	tx.tag = O9FS_NOTAG;
-	tx.fid = 0;
+	tx.fid = fid->fid;
 	
 	o9fs_rpc(omnt, &tx, &rx);
 	dir = (struct o9fsdir *) 
@@ -134,11 +121,12 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	n = o9fs_convM2D(rx.stat, rx.nstat, dir, (char *)&dir[1]);
 	if (n != rx.nstat)
 		printf("rx.nstat and convM2D disagree abour dir lenght\n");
-		
-	printf("name = %s\n", dir->name);
-	printf("user = %s\n", dir->uid);
-	printf("group = %s\n", dir->gid);
-	printf("mtime = %lu\n", dir->mtime);	
+	else {
+		printf("name = %s\n", dir->name);
+		printf("user = %s\n", dir->uid);
+		printf("group = %s\n", dir->gid);
+		printf("mtime = %lu\n", dir->mtime);
+	}
 	
 	return (error);
 }
