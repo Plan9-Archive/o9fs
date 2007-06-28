@@ -170,7 +170,7 @@ o9fs_lookup(void *v)
 	char *namep;
 	struct vnode *dvp;		/* parent dir vnode */
 	struct vnode **vpp;		/* resulting vnode */
-	struct o9fsdirent *de;
+	struct o9fsdirentx *de;
 	struct o9fsnode *dnode;
 	struct proc *p;
 	int flags, nameiop, error, islast;

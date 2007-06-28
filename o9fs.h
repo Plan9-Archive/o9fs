@@ -41,28 +41,45 @@ struct o9fsmount {
 };
 
 /* directory entry */
-struct o9fsdirent {
-	TAILQ_ENTRY(o9fsdirent)		od_entries;
+struct o9fsdirentx {
+	TAILQ_ENTRY(o9fsdirentx)		od_entries;
 	u_long						od_namelen;
 	char						od_name[MNAMELEN];
 	struct o9fsnode				*od_node;	/* node dirent refers to */
 };
 
-TAILQ_HEAD(o9fsdir, o9fsdirent);		/* directory itself */
+TAILQ_HEAD(o9fsdirx, o9fsdirentx);		/* directory itself */
 
 struct o9fsnode {
 	enum vtype		on_type;
 	ino_t			on_id;
 	struct vnode	*on_vnode;
 	u_long			on_flags;
-	struct o9fsdir	on_dir;	/* if dir, here is where we keep the entries */
+	struct o9fsdirx	on_dir;	/* if dir, here is where we keep the entries */
 };
 
 struct o9fsqid {
-	int64_t path;
+	u_int64_t path;
 	u_long vers;
 	u_char type;
 };
+
+struct o9fsdir {
+	/* system-modified data */
+	u_short	type;   /* server type */
+	u_int	dev;    /* server subtype */
+	/* file data */
+	struct	o9fsqid qid;    /* unique id from server */
+	u_long	mode;   /* permissions */
+	u_long	atime;  /* last read time */
+	u_long	mtime;  /* last write time */
+	int64_t	length; /* file length */	
+	char	*name;  /* last element of path */
+	char	*uid;   /* owner name */
+	char	*gid;   /* group name */
+	char	*muid;  /* last modifier name */
+};
+
 
 /* 9p file */
 struct o9fsfid {

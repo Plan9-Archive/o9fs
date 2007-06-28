@@ -1,130 +1,102 @@
-#include	<u.h>
-#include	<libc.h>
-#include	<fcall.h>
+#include <sys/param.h>
+#include <sys/mount.h>
+#include <sys/namei.h>
+#include <sys/vnode.h>
+
+#include <miscfs/o9fs/o9fs.h>
+#include <miscfs/o9fs/o9fs_extern.h>
+
 
 int
-statchecku(uchar *buf, uint nbuf, int dotu)
+o9fs_statcheck(u_char *buf, u_int nbuf)
 {
-	uchar *ebuf;
+	u_char *ebuf;
 	int i, nstr;
 
 	ebuf = buf + nbuf;
 
-	if(nbuf < STATFIXLEN || nbuf != BIT16SZ + GBIT16(buf))
-		return -1;
+	if(nbuf < O9FS_STATFIXLEN || nbuf != O9FS_BIT16SZ + O9FS_GBIT16(buf))
+		return (-1);
 
-	buf += STATFIXLEN - 4 * BIT16SZ;
+	buf += O9FS_STATFIXLEN - 4 * O9FS_BIT16SZ;
 
 	nstr = 4;
-	if(dotu)
-		nstr = 5;
-	for(i = 0; i < nstr; i++){
-		if(buf + BIT16SZ > ebuf)
-			return -1;
-		buf += BIT16SZ + GBIT16(buf);
+	for (i = 0; i < nstr; i++) {
+		if(buf + O9FS_BIT16SZ > ebuf)
+			return (-1);
+		buf += O9FS_BIT16SZ + O9FS_GBIT16(buf);
 	}
 
-	if(dotu)
-		buf += 3*BIT32SZ;
+	if (buf != ebuf)
+		return (-1);
 
-	if(buf != ebuf)
-		return -1;
-
-	return 0;
-}
-
-int
-statcheck(uchar *buf, uint nbuf)
-{
-	return statchecku(buf, nbuf, 0);
+	return (0);
 }
 
 static char nullstring[] = "";
 
-uint
-convM2Du(uchar *buf, uint nbuf, Dir *d, char *strs, int dotu)
+u_int
+o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsdir *d, char *strs)
 {
-	uchar *p, *ebuf;
+	u_char *p, *ebuf;
 	char *sv[5];
 	int i, ns, nstr;
 
-	if(nbuf < STATFIXLEN)
-		return 0; 
+	if(nbuf < O9FS_STATFIXLEN)
+		return (0); 
 
 	p = buf;
 	ebuf = buf + nbuf;
 
-	p += BIT16SZ;	/* ignore size */
-	d->type = GBIT16(p);
-	p += BIT16SZ;
-	d->dev = GBIT32(p);
-	p += BIT32SZ;
-	d->qid.type = GBIT8(p);
-	p += BIT8SZ;
-	d->qid.vers = GBIT32(p);
-	p += BIT32SZ;
-	d->qid.path = GBIT64(p);
-	p += BIT64SZ;
-	d->mode = GBIT32(p);
-	p += BIT32SZ;
-	d->atime = GBIT32(p);
-	p += BIT32SZ;
-	d->mtime = GBIT32(p);
-	p += BIT32SZ;
-	d->length = GBIT64(p);
-	p += BIT64SZ;
+	p += O9FS_BIT16SZ;	/* ignore size */
+	d->type = O9FS_GBIT16(p);
+	p += O9FS_BIT16SZ;
+	d->dev = O9FS_GBIT32(p);
+	p += O9FS_BIT32SZ;
+	d->qid.type = O9FS_GBIT8(p);
+	p += O9FS_BIT8SZ;
+	d->qid.vers = O9FS_GBIT32(p);
+	p += O9FS_BIT32SZ;
+	d->qid.path = O9FS_GBIT64(p);
+	p += O9FS_BIT64SZ;
+	d->mode = O9FS_GBIT32(p);
+	p += O9FS_BIT32SZ;
+	d->atime = O9FS_GBIT32(p);
+	p += O9FS_BIT32SZ;
+	d->mtime = O9FS_GBIT32(p);
+	p += O9FS_BIT32SZ;
+	d->length = O9FS_GBIT64(p);
+	p += O9FS_BIT64SZ;
 
 	nstr = 4;
-	if(dotu)
-		nstr = 5;
-	for(i = 0; i < nstr; i++){
-		if(p + BIT16SZ > ebuf)
-			return 0;
-		ns = GBIT16(p);
-		p += BIT16SZ;
-		if(p + ns > ebuf)
-			return 0;
-		if(strs){
+
+	for (i = 0; i < nstr; i++) {
+		if (p + O9FS_BIT16SZ > ebuf)
+			return (0);
+		ns = O9FS_GBIT16(p);
+		p += O9FS_BIT16SZ;
+		if (p + ns > ebuf)
+			return (0);
+		if (strs) {
 			sv[i] = strs;
-			memmove(strs, p, ns);
+			bcopy(p, strs, ns);
 			strs += ns;
 			*strs++ = '\0';
 		}
 		p += ns;
 	}
 
-	if(dotu){
-		if(p + BIT32SZ*3 > ebuf)
-			return 0;
-		d->uidnum = GBIT32(p);
-		p += BIT32SZ;
-		d->gidnum = GBIT32(p);
-		p += BIT32SZ;
-		d->muidnum = GBIT32(p);
-		p += BIT32SZ;
-	}
-	
-	if(strs){
+	if (strs) {
 		d->name = sv[0];
 		d->uid = sv[1];
 		d->gid = sv[2];
 		d->muid = sv[3];
-		d->ext = nullstring;
-		if(dotu)
-			d->ext = sv[4];
-	}else{
+	} else {
 		d->name = nullstring;
 		d->uid = nullstring;
 		d->gid = nullstring;
 		d->muid = nullstring;
-		d->ext = nullstring;
 	}
 	
-	return p - buf;
-}
-
-uint
-convM2D(uchar *buf, uint nbuf, Dir *d, char *strs)
-{
-	return convM2Du(buf, nbuf, d, strs, 0);
+	return (p - buf);
 }

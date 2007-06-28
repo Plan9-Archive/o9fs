@@ -66,7 +66,8 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	struct o9fsnode *rnode;
 	struct vnode *rvp;
 	struct o9fsfcall tx, rx;
-	int error;
+	struct o9fsdir *dir;
+	int error, n;
 
 	error = 0;
 
@@ -102,6 +103,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 
 	error = o9fs_tcp_open(omnt);
 
+	/* version */
 	tx.type = O9FS_TVERSION;
 	tx.tag = O9FS_NOTAG;
 	tx.version = "9P2000";
@@ -109,6 +111,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 
 	o9fs_rpc(omnt, &tx, &rx);
 
+	/* attach */
 	tx.type = O9FS_TATTACH;
 	tx.tag = 0;
 	tx.afid = O9FS_NOFID;
@@ -118,13 +121,25 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 
 	o9fs_rpc(omnt, &tx, &rx);
 
+	/* stat on root */
 	tx.type = O9FS_TSTAT;
 	tx.tag = O9FS_NOTAG;
 	tx.fid = 0;
 	
 	o9fs_rpc(omnt, &tx, &rx);
-	printf("stat: %s\n", rx.stat);
-
+	dir = (struct o9fsdir *) 
+			malloc(sizeof(struct o9fsdir) + rx.nstat, 
+			M_TEMP,	M_WAITOK);
+	
+	n = o9fs_convM2D(rx.stat, rx.nstat, dir, (char *)&dir[1]);
+	if (n != rx.nstat)
+		printf("rx.nstat and convM2D disagree abour dir lenght\n");
+		
+	printf("name = %s\n", dir->name);
+	printf("user = %s\n", dir->uid);
+	printf("group = %s\n", dir->gid);
+	printf("mtime = %lu\n", dir->mtime);	
+	
 	return (error);
 }
 	

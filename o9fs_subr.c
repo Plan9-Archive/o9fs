@@ -200,12 +200,12 @@ out:
  */
 int
 o9fs_alloc_dirent(struct o9fsnode *node, const char *name, 
-				uint16_t namelen, struct o9fsdirent **de)
+				uint16_t namelen, struct o9fsdirentx **de)
 {
-	struct o9fsdirent *nde;
+	struct o9fsdirentx *nde;
 
 	printf(">alloc_dirent\n");
-	nde = (struct o9fsdirent *) malloc(sizeof(struct o9fsdirent), M_TEMP, M_WAITOK);
+	nde = (struct o9fsdirentx *) malloc(sizeof(struct o9fsdirentx), M_TEMP, M_WAITOK);
 	if (nde == NULL)
 		return (ENOSPC);
 
@@ -219,7 +219,7 @@ o9fs_alloc_dirent(struct o9fsnode *node, const char *name,
 }
 
 void
-o9fs_dir_attach(struct vnode *vp, struct o9fsdirent *de)
+o9fs_dir_attach(struct vnode *vp, struct o9fsdirentx *de)
 {
 	struct o9fsnode *dnode;
 
@@ -233,7 +233,7 @@ int
 o9fs_create_file(struct vnode *dvp, struct vnode **vpp, struct vattr *vap,
 	struct componentname *cnp)
 {
-	struct o9fsdirent *de;
+	struct o9fsdirentx *de;
 	struct o9fsnode *dnode;
 	struct o9fsnode *node;
 	int error;
@@ -267,11 +267,11 @@ out:
 	return (error);
 }
 
-struct o9fsdirent *
+struct o9fsdirentx *
 o9fs_dir_lookup(struct o9fsnode *node, struct componentname *cnp)
 {
 	short found;
-	struct o9fsdirent *de;
+	struct o9fsdirentx *de;
 	
 	found = 0;
 	TAILQ_FOREACH(de, &node->on_dir, od_entries) {
