@@ -12,10 +12,18 @@ v9fs_get_sb()
 			fill v9ses options
 		setup session dependent pools (fids and tags)
 		setup protocol specific transport
-		call protocolo specific init for estabilishing the proper connection
+		call protocol specific init for estabilishing the proper connection
 		initialize mux (multiplexor)
 		issue Tversion message
 		set msize as Rversion one
 		get newfid from fid pool
 		issue Tattach with newfid
+
+	issue Tstat
+	create root inode with root_fid = v9fs_fid_create()
+	add root_fid to root, v9fs_fid_insert()
+	v9fs_fid_insert(fid, dentry)
+		se a dentry esta vazia, aloca e inicia lista de fids nela
+		se nao, adiciona fid no fim da lista
+	root_fid->qid = qid recebido no ultimo Tstat
 

@@ -62,7 +62,7 @@ int
 mounto9fs(struct o9fs_args *args, struct mount *mp, 
 			char *node, char *host)
 {
-	struct o9fsmount *mntp;
+	struct o9fsmount *omnt;
 	struct o9fsnode *rnode;
 	struct vnode *rvp;
 	struct o9fsfcall tx, rx;
@@ -70,8 +70,8 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 
 	error = 0;
 
-	mntp = (struct o9fsmount *) malloc(sizeof(struct o9fsmount), M_MISCFSMNT, M_WAITOK);
-	if (mntp == NULL)
+	omnt = (struct o9fsmount *) malloc(sizeof(struct o9fsmount), M_MISCFSMNT, M_WAITOK);
+	if (omnt == NULL)
 		return (ENOSPC);
 
 	rnode = (struct o9fsnode *) malloc(sizeof(struct o9fsnode), M_MISCFSMNT, M_WAITOK);
@@ -86,28 +86,44 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	rvp->v_flag |= VROOT;
 	rvp->v_type = VDIR;
 	
-	mntp->om_root = rnode;
-	mntp->om_mp = mp;
-	mntp->om_saddr = args->saddr;
-	mntp->om_saddrlen = args->saddrlen;
+	omnt->om_root = rnode;
+	omnt->om_mp = mp;
+	omnt->om_saddr = args->saddr;
+	omnt->om_saddrlen = args->saddrlen;
 	
 	/* XXX io must be transparent */
-	mntp->io = &io_tcp;
+	omnt->io = &io_tcp;
 
-	mp->mnt_data = (qaddr_t) mntp;
+	mp->mnt_data = (qaddr_t) omnt;
 	vfs_getnewfsid(mp);
 
 	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
 	bcopy(node, mp->mnt_stat.f_mntonname, MNAMELEN);
 
-	error = o9fs_tcp_open(mntp);
+	error = o9fs_tcp_open(omnt);
 
-	tx.tag = O9FS_NOTAG;
 	tx.type = O9FS_TVERSION;
+	tx.tag = O9FS_NOTAG;
 	tx.version = "9P2000";
 	tx.msize = 8192;
 
-	o9fs_rpc(mntp, &tx, &rx);
+	o9fs_rpc(omnt, &tx, &rx);
+
+	tx.type = O9FS_TATTACH;
+	tx.tag = 0;
+	tx.afid = O9FS_NOFID;
+	tx.fid = 0;
+	tx.uname = "iru";
+	tx.aname = "";
+
+	o9fs_rpc(omnt, &tx, &rx);
+
+	tx.type = O9FS_TSTAT;
+	tx.tag = O9FS_NOTAG;
+	tx.fid = 0;
+	
+	o9fs_rpc(omnt, &tx, &rx);
+	printf("stat: %s\n", rx.stat);
 
 	return (error);
 }
@@ -137,21 +153,26 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 int
 o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 {
+	struct o9fsmount *omnt;
 	struct vnode *vp;
 	int error, flags;
 	
 	flags = 0;
-	vp = VFSTOO9FS(mp)->om_root->on_vnode;
+	omnt = VFSTOO9FS(mp);
+
+	vp = omnt->om_root->on_vnode;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
 	error = vflush(mp, NULL, flags);
 	if (error)
-                return (error);
+		return (error);
+
+	omnt->io->close(omnt);
 	
-	free(mp->mnt_data, M_MISCFSMNT);
-	mp->mnt_data = NULL;
+	free(omnt, M_MISCFSMNT);
+	omnt = NULL;
 	
 	return (0);
 }

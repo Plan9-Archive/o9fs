@@ -25,6 +25,9 @@ o9fs_tcp_open(struct o9fsmount *omnt)
 	char *str;
 	int error, s;
 
+	if (omnt == NULL)
+		return (EINVAL);
+
 	so = (struct socket *) malloc(sizeof(struct socket), M_TEMP, M_WAITOK);
 	error = sockargs(&nam, omnt->om_saddr, omnt->om_saddrlen, MT_SONAME);
 	if (error)
@@ -121,8 +124,23 @@ o9fs_tcp_read(struct o9fsmount *omnt, struct uio *uio)
 	return (error);
 }
 
+int
+o9fs_tcp_close(struct o9fsmount *omnt)
+{
+	struct socket *so;
+
+	if (omnt == NULL)
+		return (EINVAL);
+
+	so = omnt->om_so;
+	soshutdown(so, SHUT_RDWR);
+	soclose(so);
+	return (0);
+}
+
 struct o9fs_io io_tcp = {
 	.open	= o9fs_tcp_open,
 	.write	= o9fs_tcp_write,
 	.read	= o9fs_tcp_read,
+	.close	= o9fs_tcp_close
 };

@@ -12,6 +12,7 @@ void *o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);
 int		o9fs_tcp_open(struct o9fsmount *);
 int		o9fs_tcp_write(struct o9fsmount *, struct uio *);
 int		o9fs_tcp_read(struct o9fsmount *, struct uio *);
+int		o9fs_tcp_close(struct o9fsmount *);
 
 /* o9fs_conv*.c */
 u_int	o9fs_convM2S(u_char*, u_int, struct o9fsfcall*);

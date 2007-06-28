@@ -78,9 +78,6 @@ struct o9fsfid {
 };
 
 
-
-
-
 #define VTO9(vp) ((struct o9fsnode *)(vp)->v_data)
 #define VFSTOO9FS(mp) ((struct o9fsmount *)((mp)->mnt_data))
 
@@ -118,7 +115,6 @@ struct o9fsfcall
 	char  *data;				/* Twrite, Rread */
 	u_short	nstat;				/* Twstat, Rstat */
 	u_char *stat;				/* Twstat, Rstat */
-	int	unixfd;					/* XXX Ropenfd */
 };
 
 

@@ -107,6 +107,11 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		return (NULL);
 	}
 
+	if (rx->type == O9FS_RERROR) {
+		printf("%s\n", rx->ename);
+		return (NULL);
+	}
+
 	return (rpkt);
 }
 	
