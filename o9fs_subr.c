@@ -23,7 +23,7 @@
 #include <miscfs/o9fs/o9fs_extern.h>
 
 
-void *
+int
 o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {
 	int n, nn, error;
@@ -39,14 +39,12 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	/* calculate the size and allocate a new fcall */
 	n = o9fs_sizeS2M(tx);
 	tpkt = malloc(n, M_TEMP, M_WAITOK);
-	if (tpkt == NULL)
-		return (NULL);
 	
 	nn = o9fs_convS2M(tx, tpkt, n);
 	if (nn != n) {
 		free(tpkt, M_TEMP);
 		printf("size mismatch\n");
-		return (NULL);
+		return (EIO);
 	}
 
 	aiov.iov_base = tpkt;
@@ -61,7 +59,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	error = omnt->io->write(omnt, &auio);
 	if (error) {
 		printf("failed sending 9p message\n");
-		return (NULL);
+		return (error);
 	}
 
 	/* get msg size */
@@ -76,7 +74,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	omnt->io->read(omnt, &auio);
 	if (error) {
 		printf("receive error\n");
-		return (NULL);
+		return (error);
 	}
 
 	nn = O9FS_GBIT32(buf);
@@ -97,22 +95,22 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	error = omnt->io->read(omnt, &auio);
 	if (error) {
 		printf("receive error\n");
-		return (NULL);
+		return (error);
 	}
 
 	n = O9FS_GBIT32((u_char *)rpkt);
 	nn = o9fs_convM2S(rpkt, n, rx);
 	if (nn != n) {
 		free(rpkt, M_TEMP);
-		return (NULL);
+		return (EIO);
 	}
 
 	if (rx->type == O9FS_RERROR) {
 		printf("%s\n", rx->ename);
-		return (NULL);
+		return (EIO);
 	}
 
-	return (rpkt);
+	return (error);
 }
 	
 	
