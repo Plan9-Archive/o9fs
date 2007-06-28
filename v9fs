@@ -23,7 +23,7 @@ v9fs_get_sb()
 	create root inode with root_fid = v9fs_fid_create()
 	add root_fid to root, v9fs_fid_insert()
 	v9fs_fid_insert(fid, dentry)
-		se a dentry esta vazia, aloca e inicia lista de fids nela
-		se nao, adiciona fid no fim da lista
-	root_fid->qid = qid recebido no ultimo Tstat
+		if dentry is empty, alloc and initialize its fid list
+		if not, add fid to lists tail
+	root_fid->qid = qid received in last Tstat
 
