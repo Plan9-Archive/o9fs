@@ -78,7 +78,6 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	}
 
 	nn = O9FS_GBIT32(buf);
-	printf("msg size %d\n", nn);
 	rpkt = (void *) malloc(nn + 4, M_TEMP, M_WAITOK);
 
 	/* read the rest of the msg */
@@ -112,7 +111,25 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 
 	return (error);
 }
+
+u_int
+o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
+{
+	char *s;
+	u_int i;
 	
+	i = 0;
+	s = str;
+	while (i < reslen && *s) {
+		while (*s == delim)
+			*(s++) = '\0';
+		if (*s)
+			res[i++] = s;
+		while (*s && *s != delim)
+			s++;
+	}
+	return i;
+}
 	
 int
 o9fs_alloc_node(struct o9fsnode **node, enum vtype type)
@@ -282,5 +299,4 @@ o9fs_dir_lookup(struct o9fsnode *node, struct componentname *cnp)
 	
 	return (found?de:NULL);
 }
-
 

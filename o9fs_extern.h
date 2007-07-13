@@ -6,6 +6,7 @@ int		o9fs_create_file(struct vnode *, struct vnode **, struct vattr *, struct co
 void	o9fs_dir_attach(struct vnode *, struct o9fsdirentx *);
 struct	o9fsdirentx *o9fs_dir_lookup(struct o9fsnode *, struct componentname *);
 int		o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);
+u_int	o9fs_tokenize(char **, u_int, char *, char);
 
 /* o9fs_io.c */
 int		o9fs_tcp_open(struct o9fsmount *);
@@ -15,9 +16,10 @@ int		o9fs_tcp_close(struct o9fsmount *);
 
 /* o9fs_9p.c */
 int		o9fs_tversion(struct o9fsmount *, int, char *);
-struct o9fsfid *o9fs_tattach(struct o9fsmount *,
-							struct o9fsfid *,
-							char *, char *);
+struct o9fsfid *o9fs_tattach(struct o9fsmount *, struct o9fsfid *, char *, char *);
+struct o9fsdir *o9fs_tstat(struct o9fsmount *, char *);
+struct o9fsdir *o9fs_fstat(struct o9fsmount *, struct o9fsfid *);
+struct o9fsfid *o9fs_twalk(struct o9fsmount *, struct o9fsfid *, char *);
 
 /* o9fs_conv*.c */
 u_int	o9fs_convM2S(u_char*, u_int, struct o9fsfcall*);
