@@ -58,10 +58,8 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	struct o9fsmount *omnt;
 	struct o9fsnode *rnode;
 	struct vnode *rvp;
-	struct o9fsfcall tx, rx;
-	struct o9fsdir *dir;
 	struct o9fsfid *fid;
-	int error, n;
+	int error;
 
 	error = 0;
 
@@ -85,9 +83,10 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_mp = mp;
 	omnt->om_saddr = args->saddr;
 	omnt->om_saddrlen = args->saddrlen;
-;
-	pool_init(&omnt->om_o9fs.freefid, sizeof(struct o9fsfid), 
-		0, 0, 0, "o9fsfid", &pool_allocator_nointr);
+	omnt->om_o9fs.nextfid = 1;
+	omnt->om_o9fs.freefid = NULL;
+/*	pool_init(&omnt->om_o9fs.freefid, sizeof(struct o9fsfid), 
+		0, 0, 0, "o9fsfid", &pool_allocator_nointr); */
 	
 	/* XXX io must be transparent */
 	omnt->io = &io_tcp;
@@ -107,26 +106,11 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	fid = o9fs_tattach(omnt, 0, "iru", 0);
 	if (fid == NULL)
 		return (EIO);
+	omnt->om_o9fs.rootfid = fid;
 
-	/* stat on root */
-	tx.type = O9FS_TSTAT;
-	tx.tag = O9FS_NOTAG;
-	tx.fid = fid->fid;
-	
-	o9fs_rpc(omnt, &tx, &rx);
-	dir = (struct o9fsdir *) 
-			malloc(sizeof(struct o9fsdir) + rx.nstat, 
-			M_TEMP,	M_WAITOK);
-	
-	n = o9fs_convM2D(rx.stat, rx.nstat, dir, (char *)&dir[1]);
-	if (n != rx.nstat)
-		printf("rx.nstat and convM2D disagree abour dir lenght\n");
-	else {
-		printf("name = %s\n", dir->name);
-		printf("user = %s\n", dir->uid);
-		printf("group = %s\n", dir->gid);
-		printf("mtime = %lu\n", dir->mtime);
-	}
+ 	o9fs_tstat(omnt, "/shit"); 
+	o9fs_tstat(omnt, "/etc/X11"); 
+	o9fs_tstat(omnt, "/etc/shit");
 	
 	return (error);
 }
