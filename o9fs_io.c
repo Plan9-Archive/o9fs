@@ -32,10 +32,8 @@ o9fs_tcp_open(struct o9fsmount *omnt)
 	error = sockargs(&nam, omnt->om_saddr, omnt->om_saddrlen, MT_SONAME);
 	if (error)
 		return (error);
-	printf("MT_SONAME set\n");
 
 	saddr = mtod(nam, struct sockaddr *);
-	printf("saddr set\n");
 
 	sin = (struct sockaddr_in *) saddr;
 	str = inet_ntoa(sin->sin_addr);
@@ -44,7 +42,6 @@ o9fs_tcp_open(struct o9fsmount *omnt)
 	error = socreate(PF_INET, &so, SOCK_STREAM, IPPROTO_TCP);
 	if (error)
 		return (error);
-	printf("socket created\n");
 
 	error = soconnect(so, nam);
 	if (error)
@@ -81,9 +78,7 @@ o9fs_tcp_open(struct o9fsmount *omnt)
 bad:
 	if (so) {
 		soshutdown(so, SHUT_WR);
-		printf("shutdown\n");
 		soclose(so);
-		printf("close\n");
 	}
 	return (error);
 }
