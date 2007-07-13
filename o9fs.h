@@ -9,9 +9,9 @@ struct o9fs {
 	int ref;
 	int fd;
 	int nextfid;
-	struct o9fsfid *root;
-//	struct o9fsfid *freefid;
-	struct pool	freefid;
+	struct o9fsfid *rootfid;
+	struct o9fsfid *freefid;
+//	struct pool	freefid;
 
 #ifdef KERNEL
 	struct simple_lock lock;	/* XXX is this the correct lock? */
