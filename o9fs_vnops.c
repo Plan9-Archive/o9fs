@@ -95,7 +95,28 @@ struct vnodeopv_desc o9fs_vnodeop_opv_desc =
 int
 o9fs_open(void *v)
 {
-	printf("open\n");
+	struct vop_open_args /* {
+        struct vnodeop_desc *a_desc;
+        struct vnode *a_vp;
+        int a_mode;
+        struct ucred *a_cred;
+        struct proc *a_p;
+} */ *ap = v;
+	struct vnode *vp;
+	struct proc *p;
+	int mode;
+	struct o9fsmount *omnt;
+	struct o9fsfid *f;
+
+	f = 0;
+	
+	printf(">open\n");
+	vp = ap->a_vp;
+	p = ap->a_p;
+	mode = ap->a_mode;
+	omnt = VFSTOO9FS(vp->v_mount);
+	
+	
 
 	return (0);
 }
@@ -119,7 +140,7 @@ o9fs_access(void *v)
 	struct vattr va;
 	struct proc *p;
 
-	printf(">access\n");
+/*	printf(">access\n"); */
 	vp = ap->a_vp;
 	a_mode = ap->a_mode;
 	cred = ap->a_cred;
@@ -130,7 +151,7 @@ o9fs_access(void *v)
 		return (error);
 	
 	error = vaccess(va.va_mode, va.va_uid, va.va_gid, a_mode, cred);
-	printf("<access\n");
+/*	printf("<access\n"); */
 
 	return (error);
 }
@@ -153,76 +174,104 @@ o9fs_create(void *v)
 	dvp = ap->a_dvp;
 	cnp = ap->a_cnp;
 	vap = ap->a_vap;
+	vpp = ap->a_vpp;
 	printf("set\n");
 
-	return(o9fs_create_file(dvp, vpp, vap, cnp));	
+	return(0);	
 }
 
 int
 o9fs_lookup(void *v)
 {
-	struct vop_lookup_args /* {
-			struct vnode * a_dvp;
-			struct vnode ** a_vpp;
-			struct componentname * a_cnp;
-	} */ *ap = v;
+	struct vop_lookup_args *ap;
 	struct componentname *cnp;
 	char *namep;
-	struct vnode *dvp;		/* parent dir vnode */
-	struct vnode **vpp;		/* resulting vnode */
-	struct o9fsdirentx *de;
-	struct o9fsnode *dnode;
+	struct vnode *dvp;
+	struct vnode **vpp;
+	struct o9fsfid *fid, *dfid;
+	struct o9fsmount *omnt;
 	struct proc *p;
 	int flags, nameiop, error, islast;
 
-	p = curproc;
+	ap = v;
+	dvp = ap->a_dvp;			/* parent dir where to look */
+	vpp = ap->a_vpp;			/* resulting vnode */
 	cnp = ap->a_cnp;
-	namep = cnp->cn_nameptr;
-	dvp = ap->a_dvp;
-	vpp = ap->a_vpp;
-	*vpp = NULLVP;
-	flags = cnp->cn_flags;
-	nameiop = cnp->cn_nameiop;
+	namep = cnp->cn_nameptr;	/* name to lookup */
+	flags = cnp->cn_flags;		/* lookup options */
+	p = curproc;
+	nameiop = cnp->cn_nameiop;	/* lookup operation */
 	islast = flags & ISLASTCN;
-	
-	dnode = VTO9(dvp);
+
 	*vpp = NULL;
+	dfid = VTO9(dvp);			/* parent dir fid */
+	omnt = VFSTOO9FS(dvp->v_mount);
 	
-	printf(">lookup\n");
-	de = o9fs_dir_lookup(dnode, cnp);
-	if (de == NULL) {
-		/* no entry found, ok if creating or renaming */
-		if (islast && (nameiop == CREATE || nameiop == RENAME)) {
-			error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, p);
-			if (error)
-				goto out;
-			/* save the componentname for reuse */
-			cnp->cn_flags |= SAVENAME;
+	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred, p);
+	if (error)
+		return error;
 
-			error = EJUSTRETURN;
+	/* if requesting . return parent */
+	if (ap->a_cnp->cn_namelen == 1 && ap->a_cnp->cn_nameptr[0] == '.') {
+		VREF(dvp);
+		*vpp = dvp;
+		return 0;
+	}
+	
+/*	o9fs_dumpchildlist(dfid); */
+
+	/* check if we have already looked up this */
+	fid = o9fs_fid_lookup(omnt, dfid, namep);
+	if (fid == NULL) {
+		printf("fid not found, walking\n");
+		/* this is the first lookup on this file
+		 * we have to walk to it from parent
+		 */
+		fid = o9fs_twalk(omnt, dfid, namep);
+		if (fid) {
+			/* fid was found, get it's info */
+			if ((o9fs_fstat(omnt, fid)) == NULL) {
+				printf("cannot stat %s\n", namep);
+				goto bad;
+			}
+
+			/* add new fid as a child of it's parent */
+			o9fs_insertfid(fid, dfid);
 		} else {
-			error = ENOENT;
+			/* it is fine to fail walking when we are creating
+			 * or renaming on the last component of the path name
+			 */
+			if (islast && (nameiop == CREATE || nameiop == RENAME)) {
+				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, p);
+				if (error)
+					goto bad;
+				/* save the name. it's gonna be used soon */
+				flags |= SAVENAME;
+				error = EJUSTRETURN;
+			} else
+				/* it wasn't found at all */
+				goto bad;
 		}
-	} else {
-		struct o9fsnode *onode;
-		
- 		/* The entry was found, so get its associated node */
-		onode = de->od_node;
-		error = o9fs_alloc_vp(dvp->v_mount, onode, vpp, 0);
-
-		/* we don't like names other than last ones not being dirs */
-		if (onode->on_type != VDIR && !islast) {
-			error = ENOTDIR;
-			goto out;
-		}
-
-		error = o9fs_alloc_vp(dvp->v_mount, onode, vpp, 0);
 	}
 
-	printf("<lookup\n");
-out: 
-	return (error);
-}
+	error = o9fs_allocvp(omnt->om_mp, fid, vpp, 0);
+	if (error)
+		goto bad;
+
+	/* fix locking on parent dir */
+	if (islast && !(cnp->cn_flags & LOCKPARENT)) {
+		VOP_UNLOCK(dvp, 0, p);
+		flags |= PDIRUNLOCK;
+	}
+
+	return 0;
+
+bad:
+	*vpp = NULL;
+	return ENOENT;
+}	
+
+
 
 int
 o9fs_getattr(void *v)
@@ -268,7 +317,7 @@ o9fs_getattr(void *v)
                 vap->va_fileid = VNOVAL;
         }
 
-        return (0);
+        return 0;
 }
 
 int
