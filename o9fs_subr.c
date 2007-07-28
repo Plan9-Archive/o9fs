@@ -6,18 +6,11 @@
 #include <sys/filedesc.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
-#include <sys/mbuf.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/un.h>
 #include <sys/lock.h>
 
-#include <netinet/in.h>
 
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
@@ -112,6 +105,33 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	return (error);
 }
 
+/* XXX should match qid.path? */
+struct o9fsfid *
+o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
+{
+	struct o9fsfid *f;
+	int found, len;
+	char *name[O9FS_MAXWELEM];
+
+	/* since the name in stat doesn't have any
+	 * slashes, tokenize it
+	 */
+	o9fs_tokenize(name, nelem(name), path, '/');
+
+	found = 0;
+	len = strlen(*name);
+	
+	TAILQ_FOREACH(f, &dir->child, fidlist) {
+		if (strlen(f->stat->name) == len && 
+			(memcmp(f->stat->name, *name, len)) == 0) {
+			found = 1;
+			break;
+		}
+	}
+
+	return found ? f : NULL;
+}
+
 u_int
 o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
 {
@@ -130,47 +150,14 @@ o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
 	}
 	return i;
 }
-	
-int
-o9fs_alloc_node(struct o9fsnode **node, enum vtype type)
-{
-	struct o9fsnode *nnode;
-	
-	printf(">alloc_node\n");
-	nnode = (struct o9fsnode *) malloc(sizeof(struct o9fsnode), M_TEMP, M_WAITOK);
-	if (nnode == NULL)
-		return (ENOSPC);
-
-	nnode->on_vnode = NULL;
-	nnode->on_type = type;
-
-	switch (type) {
-	case VBAD:
-	case VBLK:
-	case VCHR:
-	case VFIFO:
-	case VLNK:
-	case VNON:
-	case VREG:
-	case VSOCK:
-		break;
-	case VDIR:
-		TAILQ_INIT(&nnode->on_dir);
-		break;
-	}
-	
-	*node = nnode;
-	printf("<alloc_node\n");
-	return (0);
-}
 
 /*
- * Allocates a new vnode for the node node or returns a new reference to
- * an existing one if the node had already a vnode referencing it.  The
+ * Allocates a new vnode for the fid or returns a new reference to
+ * an existing one if the fid had already a vnode referencing it.  The
  * resulting locked vnode is returned in *vpp.
  */	
 int
-o9fs_alloc_vp(struct mount *mp, struct o9fsnode *node, struct vnode **vpp, u_long flags)
+o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long flags)
 {
 	struct vnode *vp;
 	struct proc *p;
@@ -178,125 +165,65 @@ o9fs_alloc_vp(struct mount *mp, struct o9fsnode *node, struct vnode **vpp, u_lon
 
 	p = curproc;
 	
-	if (node->on_vnode != NULL) {
-		vp = node->on_vnode;
+	if (fid->vp != NULL) {
+		vp = fid->vp;
 		vget(vp, LK_EXCLUSIVE | LK_RETRY, p);
 		error = 0;
 		goto out;
 	}
 	
-	/* Get a new vnode and associate it with our node */
+	/* Get a new vnode and associate it with our fid */
 	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &vp);
 	if (error)
 		goto out;
-	
+
 	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	if (error) {
 		vp->v_data = NULL;
 		vp = NULL;
 		goto out;
 	}
-	
-	vp->v_data = node;
-	vp->v_type = node->on_type;
-	vp->v_flag |= flags;
-	node->on_flags = vp->v_flag;
 
-	error = 0;
+	/* XXX circular stuff scares me */
+	fid->vp = vp;
+	if (fid->qid.type == O9FS_QTDIR) {
+		vp->v_type = VDIR;
+		TAILQ_INIT(&fid->child);
+		printf("%d dir head inited\n", fid->fid);
+	}
+
+	vp->v_data = fid;
+	vp->v_flag |= flags;
 
 out:
-	*vpp = node->on_vnode = vp;
-	return (error);
+	*vpp = fid->vp = vp;
+	return error;
 }
 
-/*
- * Allocates a new directory entry for the node node with a name of name.
- * The new directory entry is returned in *de.
- */
+/* files are inserted in the dir child list */
 int
-o9fs_alloc_dirent(struct o9fsnode *node, const char *name, 
-				uint16_t namelen, struct o9fsdirentx **de)
+o9fs_insertfid(struct o9fsfid *fid, struct o9fsfid *dir)
 {
-	struct o9fsdirentx *nde;
 
-	printf(">alloc_dirent\n");
-	nde = (struct o9fsdirentx *) malloc(sizeof(struct o9fsdirentx), M_TEMP, M_WAITOK);
-	if (nde == NULL)
-		return (ENOSPC);
-
-	nde->od_namelen = namelen;	/* am i being too overzealous? */
-	strlcpy(nde->od_name, name, namelen);
-	nde->od_node = node;
+	if (fid->stat == NULL || dir->stat == NULL) {
+		printf("child or dir don't have stat info\n");
+		return 1;
+	}
 	
-	*de = nde;
-	printf("<alloc_dirent\n");
-	return (0);
+	TAILQ_INSERT_TAIL(&dir->child, fid, fidlist);
+
+	return 0;
 }
 
 void
-o9fs_dir_attach(struct vnode *vp, struct o9fsdirentx *de)
+o9fs_dumpchildlist(struct o9fsfid *fid)
 {
-	struct o9fsnode *dnode;
+	struct o9fsfid *f;
 
-	printf(">dir_attach\n");
-	dnode = VTO9(vp);
-	TAILQ_INSERT_TAIL(&dnode->on_dir, de, od_entries);
-	printf("<dir_attach\n");
+	if (fid->stat == NULL)
+		return;
+
+	printf("child list for %s\n", fid->stat->name);
+	TAILQ_FOREACH(f, &fid->child, fidlist)
+		printf("%d %s\n", f->fid, f->stat->name);
 }
-
-int
-o9fs_create_file(struct vnode *dvp, struct vnode **vpp, struct vattr *vap,
-	struct componentname *cnp)
-{
-	struct o9fsdirentx *de;
-	struct o9fsnode *dnode;
-	struct o9fsnode *node;
-	int error;
-
-	dnode = VTO9(dvp);
-	*vpp = NULL;
-
-	/* Allocate a node that represents the new file. */
-	error = o9fs_alloc_node(&node, VREG);
-	if (error)
-		goto out;
-
-	/* Allocate a directory entry that points to the new file. */
-	error = o9fs_alloc_dirent(node, cnp->cn_nameptr, cnp->cn_namelen, &de);
-	if (error)
-		goto out;
-
-	/* Allocate a vnode for the new file. */
-	error = o9fs_alloc_vp(dvp->v_mount, node, vpp, 0);
-	if (error)
-		goto out;
-
-	/* Now that all required items are allocated, we can proceed to
-	 * insert the new node into the directory, an operation that
-	 * cannot fail. */
-	o9fs_dir_attach(dvp, de);
-
-out:
-	vput(dvp);
-	printf("create file will return with %d\n", error);
-	return (error);
-}
-
-struct o9fsdirentx *
-o9fs_dir_lookup(struct o9fsnode *node, struct componentname *cnp)
-{
-	short found;
-	struct o9fsdirentx *de;
-	
-	found = 0;
-	TAILQ_FOREACH(de, &node->on_dir, od_entries) {
-		if (de->od_namelen == (uint16_t)cnp->cn_namelen &&
-			memcmp(de->od_name, cnp->cn_nameptr, de->od_namelen) == 0) {
-			found = 1;
-			break;
-		}
-	}
-	
-	return (found?de:NULL);
-}
-
