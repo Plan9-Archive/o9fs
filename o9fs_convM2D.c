@@ -36,7 +36,7 @@ o9fs_statcheck(u_char *buf, u_int nbuf)
 static char nullstring[] = "";
 
 u_int
-o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsdir *d, char *strs)
+o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsstat *d, char *strs)
 {
 	u_char *p, *ebuf;
 	char *sv[5];
