@@ -1,6 +1,6 @@
 /* based on src/lib9pclient/fsimpl.h and include/fcall.h from p9p */
 
-#include <sys/pool.h>
+#define nelem(a) (sizeof(a) / sizeof(*a))
 
 /* 9p specific info */
 struct o9fs {
@@ -11,8 +11,6 @@ struct o9fs {
 	int nextfid;
 	struct o9fsfid *rootfid;
 	struct o9fsfid *freefid;
-//	struct pool	freefid;
-
 #ifdef KERNEL
 	struct simple_lock lock;	/* XXX is this the correct lock? */
 #endif
@@ -21,7 +19,7 @@ struct o9fs {
 struct o9fsmount;
 
 struct o9fs_io {
-	int	(*open) (struct o9fsmount *);
+	int	(*connect) (struct o9fsmount *);
 	int	(*write) (struct o9fsmount *, struct uio *);
 	int	(*read) (struct o9fsmount *, struct uio *);
 	int	(*close) (struct o9fsmount *);
@@ -32,7 +30,7 @@ extern struct o9fs_io io_tcp;
 /* o9fs session */
 struct o9fsmount {
 	struct	mount *om_mp;		/* generic mount info */
-	struct	o9fsnode *om_root;	/* local root of the tree */
+	struct	vnode *om_root;		/* local root of the tree */
 	struct	o9fs	om_o9fs;	/* 9P info */
 
 	/* for use by transport routines */
@@ -43,31 +41,13 @@ struct o9fsmount {
 	sa_family_t	om_sotype;		/* socket type */
 };
 
-/* directory entry */
-struct o9fsdirentx {
-	TAILQ_ENTRY(o9fsdirentx)	od_entries;
-	u_long						od_namelen;
-	char						od_name[MNAMELEN];
-	struct o9fsnode				*od_node;	/* node dirent refers to */
-};
-
-TAILQ_HEAD(o9fsdirx, o9fsdirentx);		/* directory itself */
-
-struct o9fsnode {
-	enum vtype		on_type;
-	ino_t			on_id;
-	struct vnode	*on_vnode;
-	u_long			on_flags;
-	struct o9fsdirx	on_dir;	/* if dir, here is where we keep the entries */
-};
-
 struct o9fsqid {
 	u_int64_t path;
 	u_long vers;
 	u_char type;
 };
 
-struct o9fsdir {
+struct o9fsstat {
 	/* system-modified data */
 	u_short	type;   /* server type */
 	u_int	dev;    /* server subtype */
@@ -85,20 +65,25 @@ struct o9fsdir {
 
 
 /* 9p file */
+TAILQ_HEAD(o9fsdir, o9fsfid);
 struct o9fsfid {
-	int fid;
-	int mode;
-	struct o9fsqid qid;
-	int64_t	offset;		/* rw offset */
-	struct o9fs *fs;	/* our fs session */
+	int					fid;
+	int					mode;
+	struct o9fsqid		qid;
+	int64_t				offset;				/* rw offset */
+	struct o9fs			*fs;			/* our fs session */
+	struct vnode		*vp;			/* backpointer to vnode */
+	struct o9fsstat		*stat;
 #ifdef KERNEL
-	struct simple_lock lock; /* XXX is this the correct lock? */
+	struct simple_lock	lock;	/* XXX is this the correct lock? */
 #endif
-	struct o9fsfid *next;
+	struct o9fsfid		*next;
+	struct o9fsdir		child;	
+	TAILQ_ENTRY(o9fsfid) fidlist;
 };
 
 
-#define VTO9(vp) ((struct o9fsnode *)(vp)->v_data)
+#define VTO9(vp) ((struct o9fsfid *)(vp)->v_data)
 #define VFSTOO9FS(mp) ((struct o9fsmount *)((mp)->mnt_data))
 
 #define	O9FS_VERSION9P	"9P2000"
@@ -199,3 +184,25 @@ enum
 	Topenfd = 	98,
 	Ropenfd
 };
+
+/* bits in Qid.type */
+#define O9FS_QTDIR           0x80            /* type bit for directories */
+#define O9FS_QTAPPEND        0x40            /* type bit for append only files */   
+#define O9FS_QTEXCL          0x20            /* type bit for exclusive use files */
+#define O9FS_QTMOUNT         0x10            /* type bit for mounted channel */
+#define O9FS_QTAUTH          0x08            /* type bit for authentication file */
+#define O9FS_QTTMP           0x04            /* type bit for non-backed-up file */  
+#define O9FS_QTSYMLINK       0x02            /* type bit for symbolic link */
+#define O9FS_QTFILE          0x00            /* type bits for plain file */
+
+/* bits in Dir.mode */
+#define O9FS_DMDIR           0x80000000      /* mode bit for directories */
+#define O9FS_DMAPPEND        0x40000000      /* mode bit for append only files */
+#define O9FS_DMEXCL          0x20000000      /* mode bit for exclusive use files */
+#define O9FS_DMMOUNT         0x10000000      /* mode bit for mounted channel */
+#define O9FS_DMAUTH          0x08000000      /* mode bit for authentication file */
+#define O9FS_DMTMP           0x04000000      /* mode bit for non-backed-up file */
+
+#define O9FS_DMREAD          0x4             /* mode bit for read permission */
+#define O9FS_DMWRITE         0x2             /* mode bit for write permission */
+#define O9FS_DMEXEC          0x1             /* mode bit for execute permission */
