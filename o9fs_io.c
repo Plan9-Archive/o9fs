@@ -16,7 +16,7 @@
 
 
 int
-o9fs_tcp_open(struct o9fsmount *omnt)
+o9fs_tcp_connect(struct o9fsmount *omnt)
 {
 	struct socket *so;
 	struct mbuf *nam;
@@ -134,7 +134,7 @@ o9fs_tcp_close(struct o9fsmount *omnt)
 }
 
 struct o9fs_io io_tcp = {
-	.open	= o9fs_tcp_open,
+	.connect= o9fs_tcp_connect,
 	.write	= o9fs_tcp_write,
 	.read	= o9fs_tcp_read,
 	.close	= o9fs_tcp_close
