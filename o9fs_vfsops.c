@@ -31,88 +31,83 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 	size_t len;
 
 	if (mp->mnt_flag & MNT_UPDATE)
-		return (EOPNOTSUPP);
+		return EOPNOTSUPP;
 
 	error = copyin(data, &args, sizeof(args));
 	if (error)
-		return (error);
+		return error;
 
 	error = copyinstr(path, root, MNAMELEN - 1, &len);
 	if (error)
-		return (error);
+		return error;
 	bzero(&root[len], MNAMELEN - len);
 	
 	error = copyinstr(args.hostname, host, MNAMELEN - 1, &len);
 	if (error)
-		return (error);
+		return error;
 	bzero(&host[len], MNAMELEN - len);
 	
 	error = mounto9fs(&args, mp, root, host);
-	return (error);
+	return error;
 }
 
 int
 mounto9fs(struct o9fs_args *args, struct mount *mp, 
-			char *node, char *host)
+			char *path, char *host)
 {
 	struct o9fsmount *omnt;
-	struct o9fsnode *rnode;
 	struct vnode *rvp;
 	struct o9fsfid *fid;
+	struct o9fsstat *stat;
 	int error;
 
 	error = 0;
 
 	omnt = (struct o9fsmount *) malloc(sizeof(struct o9fsmount), M_MISCFSMNT, M_WAITOK);
-	if (omnt == NULL)
-		return (ENOSPC);
 
-	rnode = (struct o9fsnode *) malloc(sizeof(struct o9fsnode), M_MISCFSMNT, M_WAITOK);
-	if (rnode == NULL)
-		return (ENOSPC);
-	
 	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &rvp);
 	if (error)
 		return (error);
 
-	rnode->on_vnode = rvp;
 	rvp->v_flag |= VROOT;
 	rvp->v_type = VDIR;
 	
-	omnt->om_root = rnode;
+	omnt->om_root = rvp;
 	omnt->om_mp = mp;
 	omnt->om_saddr = args->saddr;
 	omnt->om_saddrlen = args->saddrlen;
-	omnt->om_o9fs.nextfid = 1;
+	omnt->om_o9fs.nextfid = 0;
 	omnt->om_o9fs.freefid = NULL;
-/*	pool_init(&omnt->om_o9fs.freefid, sizeof(struct o9fsfid), 
-		0, 0, 0, "o9fsfid", &pool_allocator_nointr); */
 	
-	/* XXX io must be transparent */
+	/* XXX net io must be transparent */
 	omnt->io = &io_tcp;
 
 	mp->mnt_data = (qaddr_t) omnt;
 	vfs_getnewfsid(mp);
 
 	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
-	bcopy(node, mp->mnt_stat.f_mntonname, MNAMELEN);
+	bcopy(path, mp->mnt_stat.f_mntonname, MNAMELEN);
 
-	error = omnt->io->open(omnt);
+	error = omnt->io->connect(omnt);
 
 	error = o9fs_tversion(omnt, 8192, "9P2000");
 	if (error)
-		return (error);
+		return error;
 		
-	fid = o9fs_tattach(omnt, 0, "iru", 0);
+	fid = o9fs_tattach(omnt, 0, "iru", "");
 	if (fid == NULL)
-		return (EIO);
-	omnt->om_o9fs.rootfid = fid;
+		return EIO;
 
- 	o9fs_tstat(omnt, "/shit"); 
-	o9fs_tstat(omnt, "/etc/X11"); 
-	o9fs_tstat(omnt, "/etc/shit");
-	
-	return (error);
+	stat = o9fs_fstat(omnt, fid);
+	if (stat == NULL)
+		return EIO;
+
+	omnt->om_o9fs.rootfid = fid;
+	omnt->om_o9fs.rootfid->stat = stat;
+	omnt->om_root->v_data = fid;
+	o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
+
+	return error;
 }
 	
 int
@@ -126,7 +121,7 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	/*
 	 * Return locked reference to root.
 	 */
-	vp = VFSTOO9FS(mp)->om_root->on_vnode;
+	vp = VFSTOO9FS(mp)->om_root;
 	VREF(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	*vpp = vp;
@@ -147,7 +142,7 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	flags = 0;
 	omnt = VFSTOO9FS(mp);
 
-	vp = omnt->om_root->on_vnode;
+	vp = omnt->om_root;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
