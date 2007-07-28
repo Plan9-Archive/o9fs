@@ -7,9 +7,8 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-#define nelem(ary) (sizeof(ary) / sizeof(*ary))
 enum {
-	fidchunk = 32
+	fidchunk = 64
 };
 
 static struct o9fsfid *
@@ -22,12 +21,14 @@ getfid(struct o9fsmount *omnt)
         fs = &omnt->om_o9fs;
 
         if (fs->freefid == NULL) {
-                f = (struct o9fsfid *) malloc(sizeof(struct o9fsfid) * fidchunk,
+				f = (struct o9fsfid *) malloc(sizeof(struct o9fsfid) * fidchunk,
                 	M_O9FS, M_WAITOK);
-                for (i = 0; i < fidchunk; i++) {
+				for (i = 0; i < fidchunk; i++) {
                         f[i].fid = fs->nextfid++;
 						f[i].next = &f[i+1];
 						f[i].fs = fs;
+						f[i].stat = NULL;
+						f[i].vp = NULL;
                 }
 				f[i-1].next = NULL;
 				fs->freefid = f;
@@ -39,19 +40,21 @@ getfid(struct o9fsmount *omnt)
         f->qid.path = 0;
         f->qid.vers = 0;
         f->qid.type = 0;
+/*		printf("fid = %d\n", f->fid); */
         return f;
 }
 
 static void
 putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 {
-        struct o9fs *fs;
+		struct o9fs *fs;
         
-        fs = &omnt->om_o9fs;
-        f->next = fs->freefid;
-        fs->freefid = f;
+		fs = &omnt->om_o9fs;
+		f->next = fs->freefid;
+		fs->freefid = f;
 }
 
+/*
 static void
 fidclunk(struct o9fsmount *omnt, struct o9fsfid *fid)
 {
@@ -70,7 +73,7 @@ fidclose(struct o9fsmount *omnt, struct o9fsfid *fid)
 		return;
 	
 	fidclunk(omnt, fid);
-}
+}*/
 
 int
 o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
@@ -130,14 +133,11 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 struct o9fsfid *
 o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 {
-	struct o9fsfid *wfid;
 	struct o9fsfcall tx, rx;
-	struct o9fs *fs;
-	char *name, *temp;
-	int i, nwalk;
-	
-	fs = &omnt->om_o9fs;
-	
+	struct o9fsfid *f;
+	int n;
+	char *temp, *name;
+
 	name = oname;
 	if (name) {
 		temp = (char *) malloc((strlen(name)+1) * sizeof(char),
@@ -146,70 +146,52 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 		name = temp;
 	}
 	
-	if ((wfid = getfid(omnt)) == NULL) {
-		free(temp, M_TEMP);
-		return NULL;
-	}
-
-	nwalk = 0;
-	do {
-		i = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
+	n = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
+	f = getfid(omnt);
+	
+	tx.tag = 0;
+	tx.type = O9FS_TWALK;
+	tx.fid = fid->fid;
+	tx.newfid = f->fid;
+	tx.nwname = n;
 		
-		/* do a walk */
-		tx.tag = 0;
-		tx.type = O9FS_TWALK;
-		tx.fid = nwalk ? wfid->fid : fid->fid;
-		tx.newfid = wfid->fid;
-		tx.nwname = i;
-		
-		if ((o9fs_rpc(omnt, &tx, &rx)) != 0) {
-		Error:
-			free(temp, M_TEMP);
-			if (nwalk)
-				fidclose(omnt, wfid);
-			else {
-				putfid(omnt, wfid);
-			}
-			return NULL;
-		}
-		if (rx.nwqid != tx.nwname) {
-			/* XXX lame error *
-			printf("file %s not found\n", oname); */
-			printf("No such file or directory\n");
-			goto Error;
-		}
-		if (rx.nwqid == 0)
-			wfid->qid = fid->qid;
-		else
-			wfid->qid = rx.wqid[rx.nwqid - 1];
-		nwalk++;
-	} while(name && *name);
+	if ((o9fs_rpc(omnt, &tx, &rx)) != 0)
+		goto fail;
+	if (rx.nwqid < n)
+		goto fail;
+	
+	f->qid = rx.wqid[n - 1];
 
-	return wfid;
+	free(temp, M_TEMP);
+	return f;
+
+fail:
+	putfid(omnt, f);
+	return NULL;
 }
 
-struct o9fsdir *
+struct o9fsstat *
 o9fs_tstat(struct o9fsmount *omnt, char *name)
 {
-	struct o9fsdir *dir;
+	struct o9fsstat *stat;
 	struct o9fsfid *fid;
-	
+
 	if ((fid = o9fs_twalk(omnt, omnt->om_o9fs.rootfid, name)) == NULL)
 		return NULL;
 		
-	dir = o9fs_fstat(omnt, fid);
-	fidclose(omnt, fid);
+	stat = o9fs_fstat(omnt, fid);
+/*	fidclose(omnt, fid); */
 	
-	return dir;
+	return stat;
 }
 	
-struct o9fsdir *
+struct o9fsstat *
 o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 {
-	struct o9fsdir *dir;
+	struct o9fsstat *stat;
 	struct o9fsfcall tx, rx;
 	int error, n;
-	
+
 	tx.type = O9FS_TSTAT;
 	tx.tag = 0;
 	tx.fid = fid->fid;
@@ -218,14 +200,15 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 	if (error)
 		return NULL;
 
-	dir = (struct o9fsdir *) malloc(sizeof(struct o9fsdir) + rx.nstat,
+	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat) + rx.nstat,
 			M_TEMP, M_WAITOK);
 
-	n = o9fs_convM2D(rx.stat, rx.nstat, dir, (char *)&dir[1]);
+	n = o9fs_convM2D(rx.stat, rx.nstat, stat, (char *)&stat[1]);
 	if (n != rx.nstat)
 		printf("rx.nstat and convM2D disagree abour dir lenght\n");
-	else 
-		printf("name = %s\n", dir->name);
+
+	/* is this the right place? */
+	fid->stat = stat;
 	
-	return dir;
+	return stat;
 }
