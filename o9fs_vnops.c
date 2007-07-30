@@ -17,10 +17,10 @@
 #include <miscfs/o9fs/o9fs_extern.h>
 
 int o9fs_open(void *);
+int o9fs_close(void *);
 int o9fs_lookup(void *);
 int	o9fs_create(void *);
 #define	o9fs_mknod	eopnotsupp
-#define	o9fs_close	nullop	
 int o9fs_access(void *);
 int o9fs_getattr(void *);
 int o9fs_setattr(void *);
@@ -104,22 +104,72 @@ o9fs_open(void *v)
 } */ *ap = v;
 	struct vnode *vp;
 	struct proc *p;
-	int mode;
 	struct o9fsmount *omnt;
 	struct o9fsfid *f;
+	struct o9fsfcall tx, rx;
+	int error, mode;
 
-	f = 0;
-	
 	printf(">open\n");
+
 	vp = ap->a_vp;
 	p = ap->a_p;
 	mode = ap->a_mode;
+	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
-	
-	
 
-	return (0);
+	/* lock to avoid deadlocks */
+	if (f->opened)
+		return 0;
+
+	tx.tag = 0;
+	tx.type = O9FS_TOPEN;
+	tx.fid = f->fid;
+	tx.mode = 0;
+	
+	error = o9fs_rpc(omnt, &tx, &rx);
+	if (error)
+		return -1;
+
+	f->mode = mode;
+	f->opened = 1;
+	return 0;
 }
+
+static void
+fidclunk(struct o9fsmount *omnt, struct o9fsfid *fid)
+{
+	struct o9fsfcall tx, rx;
+	
+	tx.type = O9FS_TCLUNK;
+	tx.fid = fid->fid;
+	o9fs_rpc(omnt, &tx, &rx);
+	putfid(omnt, fid);
+}
+
+int
+o9fs_close(void *v)
+{
+	struct vop_close_args *ap;
+	struct vnode *vp;
+	struct o9fsfid *f;
+	struct o9fsmount *omnt;
+	
+	ap = v;
+	vp = ap->a_vp;
+	f = VTO9(vp);
+
+	if (f == NULL)
+		return 0;
+
+	omnt = VFSTOO9FS(vp->v_mount);
+
+	if (f->opened)
+		return 0;
+
+	fidclunk(omnt, f);
+	return 0;
+}
+
 
 /* we don't care, everyone is permitted everything */
 int
@@ -348,9 +398,30 @@ o9fs_setattr(void *v)
 /* return an empty dirent */
 int
 o9fs_readdir(void *v)
-{		
+{	
+	struct vop_readdir_args *ap;
+	struct vnode *vp;
+	struct uio *auio;
+	struct o9fsfid *f;
+	struct o9fsfcall *rcall;
+	struct o9fsmount *omnt;
+	int error;
+	
 	printf(">readdir\n");
-	return (0);
+
+	ap = v;
+	vp = ap->a_vp;
+	auio = ap->a_uio;
+	f = VTO9(vp);
+	omnt = VFSTOO9FS(vp->v_mount);
+
+	rcall = (struct o9fsfcall *) malloc(sizeof(struct o9fsfcall), M_TEMP, M_WAITOK);
+
+	error = o9fs_tread(omnt, f, 0, sizeof(struct o9fsstat), &rcall);
+	printf("read %d bytes\n", error);
+
+	free(rcall, M_TEMP);
+	return 0;
 }
 
 /* this should suffice for now */
@@ -369,5 +440,5 @@ o9fs_reclaim(void *v)
 		FREE(vp->v_data, M_TEMP);
 		vp->v_data = NULL;
 	}
-	return (0);
+	return 0;
 }

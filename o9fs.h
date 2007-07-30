@@ -69,8 +69,9 @@ TAILQ_HEAD(o9fsdir, o9fsfid);
 struct o9fsfid {
 	int					fid;
 	int					mode;
+	int					opened;
 	struct o9fsqid		qid;
-	int64_t				offset;				/* rw offset */
+	int64_t				offset;			/* rw offset */
 	struct o9fs			*fs;			/* our fs session */
 	struct vnode		*vp;			/* backpointer to vnode */
 	struct o9fsstat		*stat;

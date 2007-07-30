@@ -11,10 +11,55 @@
 #include <sys/malloc.h>
 #include <sys/lock.h>
 
-
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
+enum {
+	fidchunk = 64
+};
+
+struct o9fsfid *
+getfid(struct o9fsmount *omnt)
+{
+        struct o9fsfid *f;
+        struct o9fs *fs;
+        int i;
+        
+        fs = &omnt->om_o9fs;
+
+        if (fs->freefid == NULL) {
+				f = (struct o9fsfid *) malloc(sizeof(struct o9fsfid) * fidchunk,
+                	M_O9FS, M_WAITOK);
+				for (i = 0; i < fidchunk; i++) {
+                        f[i].fid = fs->nextfid++;
+						f[i].next = &f[i+1];
+						f[i].fs = fs;
+						f[i].stat = NULL;
+						f[i].vp = NULL;
+                }
+				f[i-1].next = NULL;
+				fs->freefid = f;
+        }
+        f = fs->freefid;
+        fs->freefid = f->next;
+        f->offset = 0;
+        f->mode = -1;
+        f->qid.path = 0;
+        f->qid.vers = 0;
+        f->qid.type = 0;
+/*		printf("fid = %d\n", f->fid); */
+        return f;
+}
+
+void
+putfid(struct o9fsmount *omnt, struct o9fsfid *f)
+{
+		struct o9fs *fs;
+        
+		fs = &omnt->om_o9fs;
+		f->next = fs->freefid;
+		fs->freefid = f;
+}
 
 int
 o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
@@ -89,8 +134,9 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		printf("receive error\n");
 		return (error);
 	}
+	free(tpkt, M_TEMP);
 
-	n = O9FS_GBIT32((u_char *)rpkt);
+	n = O9FS_GBIT32((u_char *) rpkt);
 	nn = o9fs_convM2S(rpkt, n, rx);
 	if (nn != n) {
 		free(rpkt, M_TEMP);
@@ -101,6 +147,8 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		printf("%s\n", rx->ename);
 		return (EIO);
 	}
+
+	free(rpkt, M_TEMP);
 
 	return (error);
 }
