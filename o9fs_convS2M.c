@@ -14,7 +14,7 @@ pstring(u_char *p, char *s)
 	if (s == NULL) {
 		O9FS_PBIT16(p, 0);
 		p += O9FS_BIT16SZ;
-		return (p);
+		return p;
 	}
 
 	n = strlen(s);
@@ -22,7 +22,7 @@ pstring(u_char *p, char *s)
 	p += O9FS_BIT16SZ;
 	bcopy(s, p, n);
 	p += n;
-	return (p);
+	return p;
 }
 
 static u_char *
@@ -34,7 +34,7 @@ pqid(u_char *p, struct o9fsqid *q)
 	p += O9FS_BIT32SZ;
 	O9FS_PBIT64(p, q->path);
 	p += O9FS_BIT64SZ;
-	return (p);
+	return p;
 }
 
 static u_int
@@ -43,7 +43,7 @@ stringsz(char *s)
 	if(s == NULL)
 		return O9FS_BIT16SZ;
 
-	return (O9FS_BIT16SZ + strlen(s));
+	return O9FS_BIT16SZ + strlen(s);
 }
 
 u_int
@@ -93,7 +93,6 @@ o9fs_sizeS2M(struct o9fsfcall *f)
 		break;
 
 	case O9FS_TOPEN:
-//	case Topenfd:
 		n += O9FS_BIT32SZ;
 		n += O9FS_BIT8SZ;
 		break;
@@ -103,8 +102,6 @@ o9fs_sizeS2M(struct o9fsfcall *f)
 		n += stringsz(f->name);
 		n += O9FS_BIT32SZ;
 		n += O9FS_BIT8SZ;
-/*		if(dotu)
-			n += stringsz(f->extension);*/
 		break;
 
 	case O9FS_TREAD:
@@ -144,8 +141,6 @@ o9fs_sizeS2M(struct o9fsfcall *f)
 
 	case O9FS_RERROR:
 		n += stringsz(f->ename);
-/*		if(dotu)
-			n += O9FS_BIT16SZ;*/
 		break;
 
 	case O9FS_RFLUSH:
@@ -170,12 +165,6 @@ o9fs_sizeS2M(struct o9fsfcall *f)
 		n += O9FS_BIT32SZ;
 		break;
 
-/*	case Ropenfd:
-		n += QIDSZ;
-		n += BIT32SZ;
-		n += BIT32SZ;
-		break;*/
-
 	case O9FS_RREAD:
 		n += O9FS_BIT32SZ;
 		n += f->count;
@@ -199,7 +188,7 @@ o9fs_sizeS2M(struct o9fsfcall *f)
 	case O9FS_RWSTAT:
 		break;
 	}
-	return (n);
+	return n;
 }
 
 u_int
@@ -210,11 +199,11 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 
 	size = o9fs_sizeS2M(f);
 	if (size == 0)
-		return (0);
+		return 0;
 	if (size > nap)
-		return (0);
+		return 0;
 
-	p = (u_char*)ap;
+	p = (u_char*) ap;
 
 	O9FS_PBIT32(p, size);
 	p += O9FS_BIT32SZ;
@@ -226,7 +215,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 	switch (f->type)
 	{
 	default:
-		return (0);
+		return 0;
 
 	case O9FS_TVERSION:
 		O9FS_PBIT32(p, f->msize);
@@ -269,12 +258,11 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		break;
 
 	case O9FS_TOPEN:
-/*	case Topenfd:
-		PBIT32(p, f->fid);
-		p += BIT32SZ;
-		PBIT8(p, f->mode);
-		p += BIT8SZ;
-		break;*/
+		O9FS_PBIT32(p, f->fid);
+		p += O9FS_BIT32SZ;
+		O9FS_PBIT8(p, f->mode);
+		p += O9FS_BIT8SZ;
+		break;
 
 	case O9FS_TCREATE:
 		O9FS_PBIT32(p, f->fid);
@@ -284,8 +272,6 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		p += O9FS_BIT32SZ;
 		O9FS_PBIT8(p, f->mode);
 		p += O9FS_BIT8SZ;
-		/*if(dotu)
-			p = pstring(p, f->extension);*/
 		break;
 
 	case O9FS_TREAD:
@@ -338,10 +324,6 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 
 	case O9FS_RERROR:
 		p = pstring(p, f->ename);
-	/*	if(dotu){
-			PBIT16(p, f->errornum);
-			p += BIT16SZ;
-		}*/
 		break;
 
 	case O9FS_RFLUSH:
@@ -366,14 +348,9 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 
 	case O9FS_ROPEN:
 	case O9FS_RCREATE: 
-//	case Ropenfd:
 		p = pqid(p, &f->qid);
 		O9FS_PBIT32(p, f->iounit);
 		p += O9FS_BIT32SZ;
-	/*	if(f->type == Ropenfd){
-			PBIT32(p, f->unixfd);
-			p += BIT32SZ;
-		}*/
 		break;
 
 	case O9FS_RREAD:
@@ -404,7 +381,7 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 	case O9FS_RWSTAT:
 		break;
 	}
-	if(size != p-ap)
-		return (0);
-	return (size);
+	if (size != p-ap)
+		return 0;
+	return size;
 }
