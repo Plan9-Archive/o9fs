@@ -49,18 +49,18 @@ struct o9fsqid {
 
 struct o9fsstat {
 	/* system-modified data */
-	u_short	type;   /* server type */
-	u_int	dev;    /* server subtype */
+	u_short	type;	/* server type */
+	u_int	dev;	/* server subtype */
 	/* file data */
-	struct	o9fsqid qid;    /* unique id from server */
-	u_long	mode;   /* permissions */
-	u_long	atime;  /* last read time */
-	u_long	mtime;  /* last write time */
-	int64_t	length; /* file length */	
-	char	*name;  /* last element of path */
-	char	*uid;   /* owner name */
-	char	*gid;   /* group name */
-	char	*muid;  /* last modifier name */
+	struct	o9fsqid qid;	/* unique id from server */
+	u_long	mode;	/* permissions */
+	u_long	atime;	/* last read time */
+	u_long	mtime;	/* last write time */
+	int64_t	length;	/* file length */	
+	char	*name;	/* last element of path */
+	char	*uid;	/* owner name */
+	char	*gid;	/* group name */
+	char	*muid;	/* last modifier name */
 };
 
 
@@ -68,7 +68,7 @@ struct o9fsstat {
 TAILQ_HEAD(o9fsdir, o9fsfid);
 struct o9fsfid {
 	int					fid;
-	int					mode;
+	int					mode;			/* open mode */
 	int					opened;
 	struct o9fsqid		qid;
 	int64_t				offset;			/* rw offset */
@@ -207,3 +207,17 @@ enum
 #define O9FS_DMREAD          0x4             /* mode bit for read permission */
 #define O9FS_DMWRITE         0x2             /* mode bit for write permission */
 #define O9FS_DMEXEC          0x1             /* mode bit for execute permission */
+
+/* open modes */
+#define O9FS_OREAD	0		/* open for read */
+#define O9FS_OWRITE	1		/* write */
+#define O9FS_ORDWR	2		/* read and write */
+#define O9FS_OEXEC	3		/* execute, == read but check execute permission */
+#define O9FS_OTRUNC	16		/* or'ed in (except for exec), truncate file first */
+#define O9FS_OCEXEC	32		/* or'ed in, close on exec */
+#define O9FS_ORCLOSE	64		/* or'ed in, remove on close */
+#define O9FS_ODIRECT	128		/* or'ed in, direct access */
+#define O9FS_ONONBLOCK 256	/* or'ed in, non-blocking call */
+#define O9FS_OEXCL	0x1000	/* or'ed in, exclusive use (create only) */
+#define O9FS_OLOCK	0x2000	/* or'ed in, lock after opening */
+#define O9FS_OAPPEND	0x4000	/* or'ed in, append only */
