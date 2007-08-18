@@ -1,12 +1,15 @@
 /* o9fs_subr.c */
 int		o9fs_allocvp(struct mount *, struct o9fsfid *, struct vnode **, u_long);
+void	o9fs_freevp(struct vnode *);
 int		o9fs_insertfid(struct o9fsfid *, struct o9fsfid *);
 int		o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);
 struct o9fsfid *o9fs_fid_lookup(struct o9fsmount *, struct o9fsfid *, char *);
 void	o9fs_dumpchildlist(struct o9fsfid *);
 u_int	o9fs_tokenize(char **, u_int, char *, char);
-struct o9fsfid *getfid(struct o9fsmount *);
-void	putfid(struct o9fsmount *, struct o9fsfid *);
+struct o9fsfid *o9fs_getfid(struct o9fsmount *);
+void	o9fs_putfid(struct o9fsmount *, struct o9fsfid *);
+long	o9fs_dirpackage(u_char *, long, struct o9fsstat **);
+int		o9fs_ptoumode(int mode);
 
 /* o9fs_io.c */
 int		o9fs_tcp_connect(struct o9fsmount *);
@@ -21,7 +24,8 @@ struct	o9fsstat *o9fs_tstat(struct o9fsmount *, char *);
 struct	o9fsstat *o9fs_fstat(struct o9fsmount *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fsmount *, struct o9fsfid *, char *);
 int		o9fs_topen(struct o9fsmount *, struct o9fsfid *, int);
-int		o9fs_tread(struct o9fsmount *, struct o9fsfid *, int64_t, uint32_t, struct o9fsfcall **);
+long	o9fs_tread(struct o9fsmount *, struct o9fsfid *, char *, long, int64_t);
+int		o9fs_t2read(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset, uint32_t count, struct o9fsfcall **rcall);
 
 /* o9fs_conv*.c */
 u_int	o9fs_convM2S(u_char*, u_int, struct o9fsfcall*);
