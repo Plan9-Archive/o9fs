@@ -6,7 +6,6 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-
 int
 o9fs_statcheck(u_char *buf, u_int nbuf)
 {
@@ -16,21 +15,21 @@ o9fs_statcheck(u_char *buf, u_int nbuf)
 	ebuf = buf + nbuf;
 
 	if(nbuf < O9FS_STATFIXLEN || nbuf != O9FS_BIT16SZ + O9FS_GBIT16(buf))
-		return (-1);
+		return -1;
 
 	buf += O9FS_STATFIXLEN - 4 * O9FS_BIT16SZ;
 
 	nstr = 4;
 	for (i = 0; i < nstr; i++) {
 		if(buf + O9FS_BIT16SZ > ebuf)
-			return (-1);
+			return -1;
 		buf += O9FS_BIT16SZ + O9FS_GBIT16(buf);
 	}
 
 	if (buf != ebuf)
-		return (-1);
+		return -1;
 
-	return (0);
+	return 0;
 }
 
 static char nullstring[] = "";
@@ -43,7 +42,7 @@ o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsstat *d, char *strs)
 	int i, ns, nstr;
 
 	if(nbuf < O9FS_STATFIXLEN)
-		return (0); 
+		return 0; 
 
 	p = buf;
 	ebuf = buf + nbuf;
@@ -72,11 +71,11 @@ o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsstat *d, char *strs)
 
 	for (i = 0; i < nstr; i++) {
 		if (p + O9FS_BIT16SZ > ebuf)
-			return (0);
+			return 0;
 		ns = O9FS_GBIT16(p);
 		p += O9FS_BIT16SZ;
 		if (p + ns > ebuf)
-			return (0);
+			return 0;
 		if (strs) {
 			sv[i] = strs;
 			bcopy(p, strs, ns);
@@ -98,5 +97,5 @@ o9fs_convM2D(u_char *buf, u_int nbuf, struct o9fsstat *d, char *strs)
 		d->muid = nullstring;
 	}
 	
-	return (p - buf);
+	return p - buf;
 }
