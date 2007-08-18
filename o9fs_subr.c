@@ -3,7 +3,7 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/filedesc.h>
+#include <sys/stat.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
@@ -19,7 +19,7 @@ enum {
 };
 
 struct o9fsfid *
-getfid(struct o9fsmount *omnt)
+o9fs_getfid(struct o9fsmount *omnt)
 {
         struct o9fsfid *f;
         struct o9fs *fs;
@@ -36,6 +36,7 @@ getfid(struct o9fsmount *omnt)
 						f[i].fs = fs;
 						f[i].stat = NULL;
 						f[i].vp = NULL;
+						f[i].opened = 0;
                 }
 				f[i-1].next = NULL;
 				fs->freefid = f;
@@ -52,7 +53,7 @@ getfid(struct o9fsmount *omnt)
 }
 
 void
-putfid(struct o9fsmount *omnt, struct o9fsfid *f)
+o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 {
 		struct o9fs *fs;
         
@@ -122,7 +123,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	O9FS_PBIT32(rpkt, nn);
 
 	aiov.iov_base = rpkt + 4;
-	aiov.iov_len = auio.uio_resid = nn -4;
+	aiov.iov_len = auio.uio_resid = nn - 4;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
@@ -239,6 +240,8 @@ o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long f
 		TAILQ_INIT(&fid->child);
 		printf("%d dir head inited\n", fid->fid);
 	}
+	else
+		vp->v_type = VREG;
 
 	vp->v_data = fid;
 	vp->v_flag |= flags;
@@ -246,6 +249,16 @@ o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long f
 out:
 	*vpp = fid->vp = vp;
 	return error;
+}
+
+void
+o9fs_freevp(struct vnode *vp)
+{
+	struct o9fsfid *f;
+	
+	f = VTO9(vp);
+	f->vp = NULL;
+	vp->v_data = NULL;
 }
 
 /* files are inserted in the dir child list */
@@ -259,9 +272,22 @@ o9fs_insertfid(struct o9fsfid *fid, struct o9fsfid *dir)
 	}
 	
 	TAILQ_INSERT_TAIL(&dir->child, fid, fidlist);
-
 	return 0;
 }
+
+/*
+int
+o9fs_removefid(struct o9fsfid *fid, struct o9fsfid *dir)
+{
+	if (fid->stat == NULL || dir->stat == NULL) {
+		printf("invalid fid or dir\n");
+		return 1;
+	}
+
+	TAILQ_REMOVE(&dir->child, fid, fidlist);
+	return 0;
+}
+*/
 
 void
 o9fs_dumpchildlist(struct o9fsfid *fid)
@@ -274,4 +300,75 @@ o9fs_dumpchildlist(struct o9fsfid *fid)
 	printf("child list for %s\n", fid->stat->name);
 	TAILQ_FOREACH(f, &fid->child, fidlist)
 		printf("%d %s\n", f->fid, f->stat->name);
+}
+
+long
+o9fs_dirpackage(u_char *buf, long ts, struct o9fsstat **d)
+{
+	char *s;
+	long ss, i, n, nn, m;
+ 
+	*d = NULL;
+	if (ts <= 0)
+		return 0;
+ 
+	/*
+	 * first find number of all stats, check they look like stats, & size all associated strings
+	 */
+	ss = 0;
+	n = 0;
+ 	for (i = 0; i < ts; i += m) {
+ 		m = O9FS_BIT16SZ + O9FS_GBIT16(&buf[i]);
+		if ((o9fs_statcheck(&buf[i], m)) < 0)
+			break;
+		ss += m;
+		n++;
+	}
+
+	if (i != ts) {
+		printf("i != ts\n");
+		return -1;
+ 	}
+
+	*d = malloc(n * sizeof(struct o9fsstat) + ss, M_O9FS, M_WAITOK);
+
+	/*
+	 * then convert all buffers
+	 */
+	s = (char *) *d + n * sizeof(struct o9fsstat);
+	nn = 0;
+	for (i = 0; i < ts; i += m) {
+		m = O9FS_BIT16SZ + O9FS_GBIT16((u_char *) &buf[i]);
+		if (nn >= n || o9fs_convM2D(&buf[i], m, *d + nn, s) != m) {
+			free(*d, M_O9FS);
+			*d = NULL;
+			return -1;
+		}
+		nn++;
+		s += m;
+	}
+
+	return nn;
+}
+
+int
+o9fs_ptoumode(int mode)
+{
+	int umode;
+	
+	umode = mode & 0777;
+	if ((mode & O9FS_DMDIR) == O9FS_DMDIR)
+		umode |= S_IFDIR;
+	else
+		umode |= S_IFREG;
+
+	printf("%o\n", umode);
+	if ((mode & S_IRUSR) == S_IRUSR)
+		umode |= O9FS_DMREAD;
+	if ((mode & S_IWUSR) == S_IWUSR)
+		umode |= O9FS_DMWRITE;
+	if ((mode & S_IXUSR) == S_IXUSR)
+		umode |= O9FS_DMEXEC;
+	
+	return umode;
 }
