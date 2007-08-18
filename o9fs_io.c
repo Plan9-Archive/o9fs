@@ -26,12 +26,12 @@ o9fs_tcp_connect(struct o9fsmount *omnt)
 	int error, s;
 
 	if (omnt == NULL)
-		return (EINVAL);
+		return EINVAL;
 
 	so = (struct socket *) malloc(sizeof(struct socket), M_TEMP, M_WAITOK);
 	error = sockargs(&nam, omnt->om_saddr, omnt->om_saddrlen, MT_SONAME);
 	if (error)
-		return (error);
+		return error;
 
 	saddr = mtod(nam, struct sockaddr *);
 
@@ -41,11 +41,11 @@ o9fs_tcp_connect(struct o9fsmount *omnt)
 
 	error = socreate(PF_INET, &so, SOCK_STREAM, IPPROTO_TCP);
 	if (error)
-		return (error);
+		return error;
 
 	error = soconnect(so, nam);
 	if (error)
-		return (error);
+		return error;
 
 	/* ripped from nfs */
 	/*
@@ -73,14 +73,14 @@ o9fs_tcp_connect(struct o9fsmount *omnt)
 	splx(s);
 	
 	omnt->om_so = so;
-	return (error);
+	return error;
 
 bad:
 	if (so) {
 		soshutdown(so, SHUT_WR);
 		soclose(so);
 	}
-	return (error);
+	return error;
 }
 
 int
@@ -90,7 +90,7 @@ o9fs_tcp_write(struct o9fsmount *omnt, struct uio *uio)
 	int error;
 
 	if ((omnt == NULL) || (uio == NULL))
-		return (EINVAL);
+		return EINVAL;
 
 	so = omnt->om_so;
 
@@ -98,7 +98,7 @@ o9fs_tcp_write(struct o9fsmount *omnt, struct uio *uio)
 					(struct mbuf *)0, (struct mbuf *)0, 0);
 
 	/* XXX shouldn't we return the # of bytes written? */
-	return (error);
+	return error;
 }
 	
 int
@@ -116,7 +116,7 @@ o9fs_tcp_read(struct o9fsmount *omnt, struct uio *uio)
 					(struct mbuf **)0, (struct mbuf **)0, 0);
 
 	/* XXX shouldn't we return the # of bytes read? */
-	return (error);
+	return error;
 }
 
 int
@@ -125,12 +125,12 @@ o9fs_tcp_close(struct o9fsmount *omnt)
 	struct socket *so;
 
 	if (omnt == NULL)
-		return (EINVAL);
+		return EINVAL;
 
 	so = omnt->om_so;
 	soshutdown(so, SHUT_RDWR);
 	soclose(so);
-	return (0);
+	return 0;
 }
 
 struct o9fs_io io_tcp = {
