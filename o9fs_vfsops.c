@@ -57,8 +57,8 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 {
 	struct o9fsmount *omnt;
 	struct vnode *rvp;
-	struct o9fsfid *fid;
-	struct o9fsstat *stat;
+	struct o9fsfid *fid, *tf;
+	struct o9fsstat *stat, *ts;
 	int error;
 
 	error = 0;
@@ -89,6 +89,10 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	bcopy(path, mp->mnt_stat.f_mntonname, MNAMELEN);
 
 	error = omnt->io->connect(omnt);
+	if (error) {
+		omnt->io->close(omnt);
+		return error;
+	}
 
 	error = o9fs_tversion(omnt, 8192, "9P2000");
 	if (error)
@@ -106,6 +110,20 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_o9fs.rootfid->stat = stat;
 	omnt->om_root->v_data = fid;
 	o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
+
+	{
+	long n;
+	char *buf;
+	
+	buf = (char *) malloc(4096, M_TEMP, M_WAITOK);
+	tf = o9fs_twalk(omnt, omnt->om_o9fs.rootfid, "test/a");
+	ts = o9fs_fstat(omnt, tf);
+	o9fs_topen(omnt, tf, 0);
+	n = o9fs_tread(omnt, tf, buf, 4096, 0);
+	printf("read %d bytes\n", n);
+	printf("%d\n", *buf);
+	free(buf, M_TEMP);
+	}
 
 	return error;
 }
@@ -126,7 +144,7 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	*vpp = vp;
 
-	return (0);
+	return 0;
 }
 
 /* this seems weird to me. i based much of the work on
@@ -152,17 +170,17 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		return (error);
 
 	omnt->io->close(omnt);
-	
+
 	free(omnt, M_MISCFSMNT);
 	omnt = NULL;
 	
-	return (0);
+	return 0;
 }
 
 int
 o9fs_start(struct mount *mp, int flags, struct proc *p)
 {
-	return (0);
+	return 0;
 }
 
 int
@@ -181,7 +199,7 @@ o9fs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
 	strlcpy(sbp->f_fstypename, mp->mnt_vfc->vfc_name, MFSNAMELEN);
-	return (0);
+	return 0;
 }
 
 
