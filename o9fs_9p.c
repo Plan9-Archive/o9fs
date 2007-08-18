@@ -7,7 +7,6 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-
 int
 o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 {
@@ -45,7 +44,7 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	if (aname == NULL)
 		aname = "";
 	
-	fid = getfid(omnt);
+	fid = o9fs_getfid(omnt);
 	
 	tx.tag = 0;
 	tx.type = O9FS_TATTACH;
@@ -56,7 +55,7 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 
 	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error) {
-		putfid(omnt, fid);
+		o9fs_putfid(omnt, fid);
 		return NULL;
 	}
 	fid->qid = rx.qid;
@@ -79,8 +78,9 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 		name = temp;
 	}
 	
+	printf("twalk: mode = %d\n", fid->mode);
 	n = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
-	f = getfid(omnt);
+	f = o9fs_getfid(omnt);
 	
 	tx.tag = 0;
 	tx.type = O9FS_TWALK;
@@ -99,7 +99,7 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 	return f;
 
 fail:
-	putfid(omnt, f);
+	o9fs_putfid(omnt, f);
 	return NULL;
 }
 
@@ -161,11 +161,13 @@ o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
 	if (error)
 		return -1;
 	fid->mode = mode;
+	printf("topen: mode = %d\n", fid->mode);
 	return 0;
 }
 
+
 int
-o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset,
+o9fs_t2read(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset,
 			uint32_t count, struct o9fsfcall **rcall)
 {
 	struct o9fsfcall tx, rx;
@@ -182,5 +184,43 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset,
 		return -1;
 
 	*rcall = &rx;
+	return rx.count;
+}
+
+long
+o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, char *buf, 
+			long n, int64_t offset)
+{
+	struct o9fsfcall tx, rx;
+	u_int msize;
+
+	msize = f->fs->msize - O9FS_IOHDRSZ;
+	if (n > msize)
+		n = msize;
+	
+	tx.type = O9FS_TREAD;
+	tx.fid = f->fid;
+	
+	if (offset == -1) {
+		/* lock */
+		tx.offset = f->offset;
+		/* unlock */
+	} else
+		tx.offset = offset;
+	tx.count = n;
+
+	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
+		return -1;
+	
+	if (rx.count) {
+		printf("rx.data len = %d\n", strlen(rx.data));
+		bcopy(rx.data, buf, rx.count);
+		if (offset == -1) {
+			/* lock */
+			f->offset += rx.count;
+			/* unlock */
+		}
+	}
+	
 	return rx.count;
 }
