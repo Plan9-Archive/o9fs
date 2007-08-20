@@ -8,6 +8,7 @@
 #include <sys/vnode.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/dirent.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>
 #include <sys/namei.h>
@@ -19,12 +20,12 @@
 int o9fs_open(void *);
 int o9fs_close(void *);
 int o9fs_lookup(void *);
-int	o9fs_create(void *);
+int o9fs_create(void *);
 #define	o9fs_mknod	eopnotsupp
 int o9fs_access(void *);
 int o9fs_getattr(void *);
 int o9fs_setattr(void *);
-#define	o9fs_read	eopnotsupp
+int o9fs_read(void *);
 #define	o9fs_write	eopnotsupp
 #define	o9fs_ioctl	(int (*)(void *))enoioctl
 #define	o9fs_fsync	nullop
@@ -95,13 +96,7 @@ struct vnodeopv_desc o9fs_vnodeop_opv_desc =
 int
 o9fs_open(void *v)
 {
-	struct vop_open_args /* {
-        struct vnodeop_desc *a_desc;
-        struct vnode *a_vp;
-        int a_mode;
-        struct ucred *a_cred;
-        struct proc *a_p;
-} */ *ap = v;
+	struct vop_open_args *ap;
 	struct vnode *vp;
 	struct proc *p;
 	struct o9fsmount *omnt;
@@ -111,6 +106,7 @@ o9fs_open(void *v)
 
 	printf(">open\n");
 
+	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
 	mode = ap->a_mode;
@@ -130,7 +126,6 @@ o9fs_open(void *v)
 	if (error)
 		return -1;
 
-	f->mode = mode;
 	f->opened = 1;
 	return 0;
 }
@@ -143,7 +138,7 @@ fidclunk(struct o9fsmount *omnt, struct o9fsfid *fid)
 	tx.type = O9FS_TCLUNK;
 	tx.fid = fid->fid;
 	o9fs_rpc(omnt, &tx, &rx);
-	putfid(omnt, fid);
+	o9fs_putfid(omnt, fid);
 }
 
 int
@@ -163,10 +158,6 @@ o9fs_close(void *v)
 
 	omnt = VFSTOO9FS(vp->v_mount);
 
-	if (f->opened)
-		return 0;
-
-	fidclunk(omnt, f);
 	return 0;
 }
 
@@ -219,6 +210,11 @@ o9fs_create(void *v)
 	struct vnode *dvp, **vpp;
 	struct componentname *cnp;
 	struct vattr *vap;
+	struct o9fsfcall tx, rx;
+	struct o9fsfid *dfid, *f;
+	struct o9fsmount *omnt;
+	struct o9fsstat *stat;
+	int error;
 	
 	printf(">create\n");
 	dvp = ap->a_dvp;
@@ -227,7 +223,82 @@ o9fs_create(void *v)
 	vpp = ap->a_vpp;
 	printf("set\n");
 
-	return(0);	
+	*vpp = NULL;
+	dfid = VTO9(dvp);
+	f = o9fs_getfid(omnt);
+	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat), M_O9FS, M_WAITOK);
+	omnt = VFSTOO9FS(dvp->v_mount);
+
+	stat->mode = 0;
+	stat->atime = 0;
+	stat->mtime = 0;
+	stat->name = cnp->cn_nameptr;
+	stat->uid = 0;
+	stat->gid = 0;
+
+	error = o9fs_allocvp(dvp->v_mount, f, vpp, 0);
+	if (error) {
+		o9fs_freevp(*vpp);
+		goto out;
+	}
+	
+	/* attach new file to it's parent dir */
+	error = o9fs_insertfid(f, dfid);
+	if (error)
+		goto out;
+
+	tx.type = O9FS_TCREATE;
+	tx.name = cnp->cn_nameptr;
+	tx.fid = f->fid;
+	tx.mode = vap->va_mode; /* XXX convert */
+	tx.perm = 0777;
+
+	error = o9fs_rpc(omnt, &tx, &rx);
+
+out:
+/*	if (error || !(cnp->cn_flags & SAVESTART))
+		PNBUF_PUT(cnp->cn_pnbuf); */
+	vput(dvp);
+	
+	return error;
+}
+
+int
+o9fs_read(void *v)
+{
+	struct vop_read_args *ap;
+	struct vnode *vp;
+	struct uio *uio;
+	struct ucred *cred;
+	struct o9fsfid *f;
+	int ioflag, error;
+	off_t offset;
+	char *buf;
+	long n;
+
+	ap = v;
+	vp = ap->a_vp;
+	uio = ap->a_uio;
+	cred = ap->a_cred;
+	ioflag = ap->a_ioflag;
+	f = VTO9(vp);
+	n = 0;
+
+	if (uio->uio_offset < 0)
+		return EINVAL;
+
+	buf = (char *) malloc(4096, M_TEMP, M_WAITOK);
+	while (uio->uio_resid > 0) { 
+		offset = uio->uio_offset;
+		n = o9fs_tread(VFSTOO9FS(vp->v_mount), f, buf, 4096, offset);
+		printf("read %d bytes %s\n", n, buf);
+		if (n > 0)
+			error = uiomove(buf, n, uio);
+	/*	buf += n; */
+		break;
+	}
+
+	return error;
 }
 
 int
@@ -296,8 +367,9 @@ o9fs_lookup(void *v)
 				if (error)
 					goto bad;
 				/* save the name. it's gonna be used soon */
-				flags |= SAVENAME;
+				cnp->cn_flags |= SAVENAME;
 				error = EJUSTRETURN;
+				goto lockngo;
 			} else
 				/* it wasn't found at all */
 				goto bad;
@@ -308,13 +380,14 @@ o9fs_lookup(void *v)
 	if (error)
 		goto bad;
 
+lockngo:
 	/* fix locking on parent dir */
 	if (islast && !(cnp->cn_flags & LOCKPARENT)) {
 		VOP_UNLOCK(dvp, 0, p);
 		flags |= PDIRUNLOCK;
 	}
 
-	return 0;
+	return error;
 
 bad:
 	*vpp = NULL;
@@ -326,48 +399,48 @@ bad:
 int
 o9fs_getattr(void *v)
 {
-        struct vop_getattr_args /* {
-                struct vnode *a_vp;
-                struct vattr *a_vap;
-                struct ucred *a_cred;
-                struct proc *a_p;
-        } */ *ap = v;
-        struct vnode *vp = ap->a_vp;
-        struct vattr *vap = ap->a_vap;
+	struct vop_getattr_args *ap;
+	struct vnode *vp;
+	struct vattr *vap;
+	struct o9fsfid *f;
 
-        bzero(vap, sizeof(*vap));
-        vattr_null(vap);
-        vap->va_uid = 0;
-        vap->va_gid = 0;
-        vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
-        vap->va_size = DEV_BSIZE;
-        vap->va_blocksize = DEV_BSIZE;
-        getnanotime(&vap->va_atime);
-        vap->va_mtime = vap->va_atime;
-        vap->va_ctime = vap->va_atime;
-        vap->va_gen = 0;
-        vap->va_flags = 0;
-        vap->va_rdev = 0;
-        /* vap->va_qbytes = 0; */
-        vap->va_bytes = 0;
-        /* vap->va_qsize = 0; */
-        if (vp->v_flag & VROOT) {
-                vap->va_type = VDIR;
-                vap->va_mode = S_IRUSR|S_IWUSR|S_IXUSR|
-                                S_IRGRP|S_IWGRP|S_IXGRP|
-                                S_IROTH|S_IWOTH|S_IXOTH;
-                vap->va_nlink = 2;
-                vap->va_fileid = 2;
-        } else {
-                vap->va_type = VREG;
-                vap->va_mode = S_IRUSR|S_IWUSR|
-                                S_IRGRP|S_IWGRP|
-                                S_IROTH|S_IWOTH;
-                vap->va_nlink = 1;
-                vap->va_fileid = VNOVAL;
-        }
+	ap = v;
+	vp = ap->a_vp;
+	vap = ap->a_vap;
+	f = VTO9(vp);
+	printf("getattr\n");
+ 	
+	bzero(vap, sizeof(*vap));
+	vattr_null(vap);
+	vap->va_uid = 0;
+	vap->va_gid = 0;
+	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
+	vap->va_size = DEV_BSIZE;
+	vap->va_blocksize = (*f->fs).msize;
+	getnanotime(&vap->va_atime);
+	vap->va_mtime.tv_sec = 0;
+	vap->va_mtime.tv_nsec = f->stat->mtime; /* convert to struct timespec */
+	vap->va_ctime.tv_sec = 0;
+	vap->va_ctime.tv_nsec = f->stat->mtime; /* convert to struct timespec */
+	vap->va_gen = 0;
+	vap->va_flags = 0;
+	vap->va_rdev = 0;
+	vap->va_bytes = 0;
+	if (vp->v_flag & VROOT) {
+		vap->va_type = VDIR;
+		vap->va_mode = S_IRUSR|S_IWUSR|S_IXUSR|
+						S_IRGRP|S_IWGRP|S_IXGRP|
+						S_IROTH|S_IWOTH|S_IXOTH;
+		vap->va_nlink = 2;
+		vap->va_fileid = 2;
+	} else {
+		vap->va_type = vp->v_type;
+		vap->va_mode = o9fs_ptoumode(f->stat->mode); /* convert p9 -> unix mode */
+		vap->va_nlink = 1;
+		vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
+	}
 
-        return 0;
+	return 0;
 }
 
 int
@@ -403,10 +476,10 @@ o9fs_readdir(void *v)
 	struct vnode *vp;
 	struct uio *auio;
 	struct o9fsfid *f;
-	struct o9fsfcall *rcall;
 	struct o9fsmount *omnt;
-	int error;
-	
+	char *buf;
+	long n;
+
 	printf(">readdir\n");
 
 	ap = v;
@@ -415,12 +488,11 @@ o9fs_readdir(void *v)
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
 
-	rcall = (struct o9fsfcall *) malloc(sizeof(struct o9fsfcall), M_TEMP, M_WAITOK);
+	buf = (char *) malloc(4096, M_TEMP, M_WAITOK); 
+	n = o9fs_tread(omnt, f, buf, 4096, 0);
+	printf("%d %d\n", n, strlen(buf));
 
-	error = o9fs_tread(omnt, f, 0, sizeof(struct o9fsstat), &rcall);
-	printf("read %d bytes\n", error);
-
-	free(rcall, M_TEMP);
+	free(buf, M_TEMP);
 	return 0;
 }
 
@@ -428,17 +500,15 @@ o9fs_readdir(void *v)
 int
 o9fs_reclaim(void *v)
 {
-	struct vop_reclaim_args /* {
-			struct vnodeop_desc *a_desc;
-			struct vnode *a_vp;
-			struct proc *a_p;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
+	struct vop_reclaim_args *ap;
+	struct vnode *vp;
+
+	ap = v;
+	vp = ap->a_vp;
 
 	cache_purge(vp);
-	if (vp->v_data != NULL) {
-		FREE(vp->v_data, M_TEMP);
-		vp->v_data = NULL;
-	}
+	o9fs_freevp(vp);
+	fidclunk(VFSTOO9FS(vp->v_mount), VTO9(vp));
+
 	return 0;
 }
