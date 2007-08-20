@@ -12,6 +12,7 @@ o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 {
 	struct o9fsfcall tx, rx;
 	int error;
+	void *freep;
 	
 	error = 0;
 	
@@ -20,11 +21,12 @@ o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 	tx.version = version;
 	tx.msize = msize;
 	
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(omnt, &tx, &rx, &freep);
 	if (error)
 		return error;
 	
 	omnt->om_o9fs.msize = rx.msize;
+	free(freep, M_TEMP);
 	return 0;
 }
 
@@ -37,7 +39,7 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	struct o9fsfid *fid;
 	struct o9fs *fs;
 	int error;
-	
+
 	error = 0;
 	fs = &omnt->om_o9fs;
 	
@@ -53,12 +55,13 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	tx.uname = user;
 	tx.aname = aname;
 
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(omnt, &tx, &rx, 0);
 	if (error) {
 		o9fs_putfid(omnt, fid);
 		return NULL;
 	}
 	fid->qid = rx.qid;
+	
 	return fid;
 }
 
@@ -69,7 +72,7 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 	struct o9fsfid *f;
 	int n;
 	char *temp, *name;
-
+	
 	name = oname;
 	if (name) {
 		temp = (char *) malloc((strlen(name)+1) * sizeof(char),
@@ -88,7 +91,7 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 	tx.newfid = f->fid;
 	tx.nwname = n;
 		
-	if ((o9fs_rpc(omnt, &tx, &rx)) != 0)
+	if ((o9fs_rpc(omnt, &tx, &rx, 0)) != 0)
 		goto fail;
 	if (rx.nwqid < n)
 		goto fail;
@@ -124,12 +127,13 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 	struct o9fsstat *stat;
 	struct o9fsfcall tx, rx;
 	int error, n;
+	void *freep;
 
 	tx.type = O9FS_TSTAT;
 	tx.tag = 0;
 	tx.fid = fid->fid;
 
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(omnt, &tx, &rx, &freep);
 	if (error)
 		return NULL;
 
@@ -137,6 +141,7 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 			M_TEMP, M_WAITOK);
 
 	n = o9fs_convM2D(rx.stat, rx.nstat, stat, (char *)&stat[1]);
+	free(freep, M_TEMP);
 	if (n != rx.nstat)
 		printf("rx.nstat and convM2D disagree abour dir lenght\n");
 
@@ -157,35 +162,15 @@ o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
 	tx.fid = fid->fid;
 	tx.mode = mode;
 	
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(omnt, &tx, &rx, 0);
 	if (error)
 		return -1;
 	fid->mode = mode;
 	printf("topen: mode = %d\n", fid->mode);
+
 	return 0;
 }
 
-
-int
-o9fs_t2read(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset,
-			uint32_t count, struct o9fsfcall **rcall)
-{
-	struct o9fsfcall tx, rx;
-	int error;
-
-	tx.type = O9FS_TREAD;
-	tx.tag = 0;
-	tx.fid = fid->fid;
-	tx.offset = offset;
-	tx.count = count;
-
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error)
-		return -1;
-
-	*rcall = &rx;
-	return rx.count;
-}
 
 long
 o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
@@ -193,6 +178,7 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 {
 	struct o9fsfcall tx, rx;
 	u_int msize;
+	void *freep;
 
 	msize = f->fs->msize - O9FS_IOHDRSZ;
 	if (n > msize)
@@ -209,7 +195,7 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		tx.offset = offset;
 	tx.count = n;
 
-	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &rx, &freep)) < 0)
 		return -1;
 	
 	if (rx.count) {
@@ -221,5 +207,6 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		}
 	}
 
+	free(freep, M_TEMP);
 	return rx.count;
 }

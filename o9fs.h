@@ -221,3 +221,6 @@ enum
 #define O9FS_OEXCL	0x1000	/* or'ed in, exclusive use (create only) */
 #define O9FS_OLOCK	0x2000	/* or'ed in, lock after opening */
 #define O9FS_OAPPEND	0x4000	/* or'ed in, append only */
+
+
+#define O9FS_DIRMAX  (sizeof(struct o9fsstat)+65535U)   /* max length of o9fsstat structure */

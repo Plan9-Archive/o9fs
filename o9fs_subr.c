@@ -63,11 +63,12 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 }
 
 int
-o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
+o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx,
+		void **freep)
 {
 	int n, nn, error;
-	void *tpkt;
-	u_char buf[4], *rpkt;
+	void *tpkt, *rpkt;
+	u_char buf[4];
 	struct uio auio;
 	struct iovec aiov;
 	struct proc *p;
@@ -78,7 +79,10 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	/* calculate the size and allocate a new fcall */
 	n = o9fs_sizeS2M(tx);
 	tpkt = malloc(n, M_TEMP, M_WAITOK);
-	
+
+	if (freep)
+		*freep = NULL;
+
 	nn = o9fs_convS2M(tx, tpkt, n);
 	if (nn != n) {
 		free(tpkt, M_TEMP);
@@ -117,10 +121,10 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	}
 
 	n = O9FS_GBIT32(buf);
-	rpkt = (u_char *) malloc(n + 4, M_TEMP, M_WAITOK);
+	rpkt = malloc(n + 4, M_TEMP, M_WAITOK);
 
 	/* read the rest of the msg */
-	O9FS_PBIT32(rpkt, n);
+	O9FS_PBIT32((u_char *)rpkt, n);
 
 	aiov.iov_base = rpkt + 4;
 	aiov.iov_len = auio.uio_resid = n - 4;
@@ -150,7 +154,10 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		return EIO;
 	}
 
-	free(rpkt, M_TEMP);
+	if (freep)
+		*freep = rpkt;
+	else
+		free(rpkt, M_TEMP);
 
 	return error;
 }

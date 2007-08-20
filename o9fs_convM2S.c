@@ -282,7 +282,6 @@ o9fs_convM2S(u_char *ap, u_int nap, struct o9fsfcall *f)
 		if (p + f->count > ep)
 			return 0;
 		f->data = (char*)p;
-		printf("f->data = %s\n", f->data);
 		p += f->count;
 		break;
 
