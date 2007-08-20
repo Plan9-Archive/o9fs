@@ -188,7 +188,7 @@ o9fs_t2read(struct o9fsmount *omnt, struct o9fsfid *fid, int64_t offset,
 }
 
 long
-o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, char *buf, 
+o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
 			long n, int64_t offset)
 {
 	struct o9fsfcall tx, rx;
@@ -213,7 +213,6 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, char *buf,
 		return -1;
 	
 	if (rx.count) {
-		printf("rx.data len = %d\n", strlen(rx.data));
 		bcopy(rx.data, buf, rx.count);
 		if (offset == -1) {
 			/* lock */
@@ -221,6 +220,6 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, char *buf,
 			/* unlock */
 		}
 	}
-	
+
 	return rx.count;
 }
