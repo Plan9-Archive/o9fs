@@ -372,3 +372,33 @@ o9fs_ptoumode(int mode)
 	
 	return umode;
 }
+
+int
+o9fs_uflags2omode(int uflags)
+{
+	int omode;
+	
+	omode = 0;
+	switch(uflags & 3) {
+	default:
+	case O_RDONLY:
+		omode = O9FS_OREAD;
+		break;
+	case O_WRONLY:
+		omode = O9FS_OWRITE;
+		break;
+	case O_RDWR:
+		omode = O9FS_ORDWR;
+		break;
+	}
+
+	if ((uflags & O_EXCL) == O_EXCL)
+		omode |= O9FS_OEXCL;
+	if ((uflags & O_TRUNC) == O_TRUNC)
+		omode |= O9FS_OTRUNC;
+	if ((uflags & O_APPEND) == O_APPEND)
+		omode |= O9FS_OAPPEND;
+	
+	printf("mode = %d\n", omode);
+	return omode;
+}
