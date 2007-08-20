@@ -83,7 +83,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	if (nn != n) {
 		free(tpkt, M_TEMP);
 		printf("size mismatch\n");
-		return (EIO);
+		return EIO;
 	}
 
 	aiov.iov_base = tpkt;
@@ -98,7 +98,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	error = omnt->io->write(omnt, &auio);
 	if (error) {
 		printf("failed sending 9p message\n");
-		return (error);
+		return error;
 	}
 
 	/* get msg size */
@@ -110,20 +110,20 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_procp = p;
 
-	omnt->io->read(omnt, &auio);
+	error = omnt->io->read(omnt, &auio);
 	if (error) {
 		printf("receive error\n");
-		return (error);
+		return error;
 	}
 
-	nn = O9FS_GBIT32(buf);
-	rpkt = (void *) malloc(nn + 4, M_TEMP, M_WAITOK);
+	n = O9FS_GBIT32(buf);
+	rpkt = (u_char *) malloc(n + 4, M_TEMP, M_WAITOK);
 
 	/* read the rest of the msg */
-	O9FS_PBIT32(rpkt, nn);
+	O9FS_PBIT32(rpkt, n);
 
 	aiov.iov_base = rpkt + 4;
-	aiov.iov_len = auio.uio_resid = nn - 4;
+	aiov.iov_len = auio.uio_resid = n - 4;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
@@ -133,7 +133,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	error = omnt->io->read(omnt, &auio);
 	if (error) {
 		printf("receive error\n");
-		return (error);
+		return error;
 	}
 	free(tpkt, M_TEMP);
 
@@ -141,17 +141,18 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	nn = o9fs_convM2S(rpkt, n, rx);
 	if (nn != n) {
 		free(rpkt, M_TEMP);
-		return (EIO);
+		return EIO;
 	}
 
 	if (rx->type == O9FS_RERROR) {
+		free(rpkt, M_TEMP);
 		printf("%s\n", rx->ename);
-		return (EIO);
+		return EIO;
 	}
 
 	free(rpkt, M_TEMP);
 
-	return (error);
+	return error;
 }
 
 /* XXX should match qid.path? */
@@ -361,14 +362,6 @@ o9fs_ptoumode(int mode)
 		umode |= S_IFDIR;
 	else
 		umode |= S_IFREG;
-
-	printf("%o\n", umode);
-	if ((mode & S_IRUSR) == S_IRUSR)
-		umode |= O9FS_DMREAD;
-	if ((mode & S_IWUSR) == S_IWUSR)
-		umode |= O9FS_DMWRITE;
-	if ((mode & S_IXUSR) == S_IXUSR)
-		umode |= O9FS_DMEXEC;
 	
 	return umode;
 }
