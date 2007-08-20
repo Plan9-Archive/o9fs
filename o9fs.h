@@ -98,7 +98,7 @@ struct o9fsfcall
 	uint32_t		msize;		/* Tversion, Rversion */
 	char			*version;	/* Tversion, Rversion */
 
-	uint32_t		oldtag;		/* Tflush */
+	u_short			oldtag;		/* Tflush */
 
 	char			*ename;		/* Rerror */
 
@@ -116,11 +116,11 @@ struct o9fsfcall
 	char			*wname[O9FS_MAXWELEM];	/* Twalk */
 	u_short			nwqid;		/* Rwalk */
 	struct o9fsqid	wqid[O9FS_MAXWELEM];	/* Rwalk */
-	int64_t	offset;				/* Tread, Twrite */
-	uint32_t count;				/* Tread, Twrite, Rread */
-	char  *data;				/* Twrite, Rread */
-	u_short	nstat;				/* Twstat, Rstat */
-	u_char *stat;				/* Twstat, Rstat */
+	int64_t			offset;				/* Tread, Twrite */
+	uint32_t		count;				/* Tread, Twrite, Rread */
+	char			*data;				/* Twrite, Rread */
+	u_short			nstat;				/* Twstat, Rstat */
+	u_char			*stat;				/* Twstat, Rstat */
 };
 
 
@@ -128,7 +128,7 @@ struct o9fsfcall
 #define	O9FS_GBIT16(p)	((p)[0]|((p)[1]<<8))
 #define	O9FS_GBIT32(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)))
 #define	O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
-				((uint64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
+				((int64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
 
 #define	O9FS_PBIT8(p,v)	(p)[0]=(v)
 #define	O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8
