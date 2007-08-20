@@ -199,7 +199,9 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		return -1;
 	
 	if (rx.count) {
+		printf("buf %p\n", buf);
 		bcopy(rx.data, buf, rx.count);
+		printf("buf %p\n", buf);
 		if (offset == -1) {
 			/* lock */
 			f->offset += rx.count;
@@ -207,6 +209,37 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		}
 	}
 
+	free(freep, M_TEMP);
+	return rx.count;
+}
+
+long
+o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
+			long n, int64_t offset)
+{
+	struct o9fsfcall tx, rx;
+	void *freep;
+
+	tx.type = O9FS_TWRITE;
+	tx.fid = f->fid;
+	
+	if (offset == -1) {
+		/* lock */
+		tx.offset = f->offset;
+		/* unlock */
+	} else
+		tx.offset = offset;
+	tx.count = n;
+	tx.data = buf;
+
+	if ((o9fs_rpc(omnt, &tx, &tx, &freep)) < 0)
+		return -1;
+	
+	if (offset == -1 && rx.count) {
+		/* lock */
+		f->offset += rx.count;
+		/* unlock */
+	}
 	free(freep, M_TEMP);
 	return rx.count;
 }

@@ -9,7 +9,8 @@ u_int	o9fs_tokenize(char **, u_int, char *, char);
 struct o9fsfid *o9fs_getfid(struct o9fsmount *);
 void	o9fs_putfid(struct o9fsmount *, struct o9fsfid *);
 long	o9fs_dirpackage(u_char *, long, struct o9fsstat **);
-int		o9fs_ptoumode(int mode);
+int		o9fs_ptoumode(int);
+int		o9fs_uflags2omode(int);
 
 /* o9fs_io.c */
 int		o9fs_tcp_connect(struct o9fsmount *);
@@ -25,6 +26,7 @@ struct	o9fsstat *o9fs_fstat(struct o9fsmount *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fsmount *, struct o9fsfid *, char *);
 int		o9fs_topen(struct o9fsmount *, struct o9fsfid *, int);
 long	o9fs_tread(struct o9fsmount *, struct o9fsfid *, void *, long, int64_t);
+long	o9fs_twrite(struct o9fsmount *, struct o9fsfid *, void *, long, int64_t);
 
 /* o9fs_conv*.c */
 u_int	o9fs_convM2S(u_char*, u_int, struct o9fsfcall*);
