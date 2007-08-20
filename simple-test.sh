@@ -1,6 +1,6 @@
 #!/bin/sh
 # simple tests for o9fs
-# author: Iruata Souza
+# written by Iruata Souza
 # see LICENSE
 # JUL2007
 
