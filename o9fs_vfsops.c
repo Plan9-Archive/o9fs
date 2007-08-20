@@ -111,17 +111,21 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_root->v_data = fid;
 	o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
 
+	return error;
+
 	{
 	long n;
 	char *buf;
-	
+
 	buf = (char *) malloc(4096, M_TEMP, M_WAITOK);
+
 	tf = o9fs_twalk(omnt, omnt->om_o9fs.rootfid, "test/a");
 	ts = o9fs_fstat(omnt, tf);
 	o9fs_topen(omnt, tf, 0);
-	n = o9fs_tread(omnt, tf, buf, 4096, 0);
+
+	n = o9fs_tread(omnt, tf, (void *)buf, 4096, 0);
 	printf("read %d bytes\n", n);
-	printf("%d\n", *buf);
+
 	free(buf, M_TEMP);
 	}
 
