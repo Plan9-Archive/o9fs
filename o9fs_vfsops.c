@@ -111,6 +111,8 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_root->v_data = fid;
 	o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
 
+	return error;
+
 	{
 	long n;
 	char *buf;
