@@ -81,7 +81,6 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 		name = temp;
 	}
 	
-	printf("twalk: mode = %d\n", fid->mode);
 	n = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
 	f = o9fs_getfid(omnt);
 	
@@ -188,9 +187,9 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 	tx.fid = f->fid;
 	
 	if (offset == -1) {
-		/* lock */
+		rw_enter_read(&f->rwl);
 		tx.offset = f->offset;
-		/* unlock */
+		rw_exit_read(&f->rwl);
 	} else
 		tx.offset = offset;
 	tx.count = n;
@@ -199,14 +198,13 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		return -1;
 	
 	if (rx.count) {
-		printf("buf %p\n", buf);
 		bcopy(rx.data, buf, rx.count);
-		printf("buf %p\n", buf);
 		if (offset == -1) {
-			/* lock */
+			rw_enter_write(&f->rwl);
 			f->offset += rx.count;
-			/* unlock */
+			rw_exit_write(&f->rwl);
 		}
+		printf("tread:txoff %d foff %d\n", tx.offset, f->offset);
 	}
 
 	free(freep, M_TEMP);
@@ -224,11 +222,16 @@ o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 	tx.fid = f->fid;
 	
 	if (offset == -1) {
-		/* lock */
+		printf("using file offset\n");
+		rw_enter_read(&f->rwl);
 		tx.offset = f->offset;
-		/* unlock */
-	} else
+		rw_exit_read(&f->rwl);
+	} else {
+		printf("using given offset\n");
 		tx.offset = offset;
+	}
+
+	printf("twrite: txoff %d foff %d\n", tx.offset, f->offset);
 	tx.count = n;
 	tx.data = buf;
 
@@ -236,10 +239,11 @@ o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		return -1;
 	
 	if (offset == -1 && rx.count) {
-		/* lock */
+		rw_enter_write(&f->rwl);
 		f->offset += rx.count;
-		/* unlock */
+		rw_exit_write(&f->rwl);
 	}
-	free(freep, M_TEMP);
+	printf("twrite: txoff %d foff %d\n", tx.offset, f->offset);
+
 	return rx.count;
 }

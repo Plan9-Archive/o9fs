@@ -11,9 +11,7 @@ struct o9fs {
 	int nextfid;
 	struct o9fsfid *rootfid;
 	struct o9fsfid *freefid;
-#ifdef KERNEL
-	struct simple_lock lock;	/* XXX is this the correct lock? */
-#endif
+	struct rwlock	rwl;
 };
 
 struct o9fsmount;
@@ -75,9 +73,7 @@ struct o9fsfid {
 	struct o9fs			*fs;			/* our fs session */
 	struct vnode		*vp;			/* backpointer to vnode */
 	struct o9fsstat		*stat;
-#ifdef KERNEL
-	struct simple_lock	lock;	/* XXX is this the correct lock? */
-#endif
+	struct rwlock		rwl;
 	struct o9fsfid		*next;
 	struct o9fsdir		child;	
 	TAILQ_ENTRY(o9fsfid) fidlist;
