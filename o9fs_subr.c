@@ -35,7 +35,7 @@ o9fs_getfid(struct o9fsmount *omnt)
 						f[i].next = &f[i+1];
 						f[i].fs = fs;
 						f[i].stat = NULL;
-						f[i].vp = NULL;
+						f[i].vp = NULLVP;
 						f[i].opened = 0;
                 }
 				f[i-1].next = NULL;
@@ -43,12 +43,12 @@ o9fs_getfid(struct o9fsmount *omnt)
         }
         f = fs->freefid;
         fs->freefid = f->next;
+		rw_init(&f->rwl, "fidlock");
         f->offset = 0;
         f->mode = -1;
         f->qid.path = 0;
         f->qid.vers = 0;
         f->qid.type = 0;
-/*		printf("fid = %d\n", f->fid); */
         return f;
 }
 
@@ -58,6 +58,8 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 		struct o9fs *fs;
         
 		fs = &omnt->om_o9fs;
+		free(f->stat, M_TEMP);
+		f->stat = NULL;
 		f->next = fs->freefid;
 		fs->freefid = f;
 }
@@ -178,8 +180,17 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	found = 0;
 	len = strlen(*name);
 	
-	TAILQ_FOREACH(f, &dir->child, fidlist) {
+/*	TAILQ_FOREACH(f, &dir->child, fidlist) {
 		if (strlen(f->stat->name) == len && 
+			(memcmp(f->stat->name, *name, len)) == 0) {
+			found = 1;
+			break;
+		}
+	} */
+	
+	for (f = omnt->om_o9fs.rootfid; f && f->stat; f = f->next) {
+//		printf("fidlookup: %s\n", f->stat->name);
+		if (strlen(f->stat->name) == len &&
 			(memcmp(f->stat->name, *name, len)) == 0) {
 			found = 1;
 			break;
@@ -379,26 +390,20 @@ o9fs_uflags2omode(int uflags)
 	int omode;
 	
 	omode = 0;
-	switch(uflags & 3) {
+
+	switch(uflags & O_ACCMODE) {
 	default:
-	case O_RDONLY:
+		return -1;
+	case FREAD:
 		omode = O9FS_OREAD;
 		break;
-	case O_WRONLY:
+	case FWRITE:
 		omode = O9FS_OWRITE;
 		break;
-	case O_RDWR:
+	case (FREAD|FWRITE):
 		omode = O9FS_ORDWR;
 		break;
 	}
 
-	if ((uflags & O_EXCL) == O_EXCL)
-		omode |= O9FS_OEXCL;
-	if ((uflags & O_TRUNC) == O_TRUNC)
-		omode |= O9FS_OTRUNC;
-	if ((uflags & O_APPEND) == O_APPEND)
-		omode |= O9FS_OAPPEND;
-	
-	printf("mode = %d\n", omode);
 	return omode;
 }
