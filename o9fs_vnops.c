@@ -104,8 +104,6 @@ o9fs_open(void *v)
 	struct o9fsfcall tx, rx;
 	int error, mode;
 
-	printf(">open\n");
-
 	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
@@ -113,9 +111,10 @@ o9fs_open(void *v)
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
 
-	/* lock to avoid deadlocks */
-	if (f->opened)
-		return 0;
+	rw_enter_read(&f->rwl);
+	if (f->opened && (mode != f->mode))
+		f->mode = -1;
+	rw_exit_read(&f->rwl);
 
 	tx.tag = 0;
 	tx.type = O9FS_TOPEN;
@@ -125,10 +124,23 @@ o9fs_open(void *v)
 	error = o9fs_rpc(omnt, &tx, &rx, 0);
 	if (error)
 		return -1;
+
+	/* is this u9fs specific? */
+	if (rx.type == O9FS_RERROR) {
+		size_t len;
+		len = strlen(rx.ename);
+		if ((memcmp(rx.ename, "Permission denied", len)) == 0)
+			error = EPERM;
+		else
+			error = EINVAL;
+		return error;
+	}
 	
+	rw_enter_write(&f->rwl);
 	f->mode = mode;
 	f->opened = 1;
-	printf("open mode %d\n", f->mode);
+	rw_exit_write(&f->rwl);
+
 	return 0;
 }
 
@@ -159,23 +171,17 @@ o9fs_close(void *v)
 		return 0;
 
 	omnt = VFSTOO9FS(vp->v_mount);
+	fidclunk(omnt, f);
+
 
 	return 0;
 }
 
 
-/* we don't care, everyone is permitted everything */
 int
 o9fs_access(void *v)
 {		
-	struct vop_access_args /* {
-		struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_mode;
-		struct ucred *a_cred;
-		struct proc *a_p;
-	} */ *ap = v; 
-
+	struct vop_access_args *ap; 
 	struct vnode *vp;
 	mode_t a_mode;
 	int error;
@@ -183,7 +189,7 @@ o9fs_access(void *v)
 	struct vattr va;
 	struct proc *p;
 
-/*	printf(">access\n"); */
+	ap = v;
 	vp = ap->a_vp;
 	a_mode = ap->a_mode;
 	cred = ap->a_cred;
@@ -191,12 +197,10 @@ o9fs_access(void *v)
 
 	error = VOP_GETATTR(vp, &va, cred, p);
 	if (error)
-		return (error);
-	
+		return error;
 	error = vaccess(va.va_mode, va.va_uid, va.va_gid, a_mode, cred);
-/*	printf("<access\n"); */
 
-	return (error);
+	return error;
 }
 
 /* consider writing a generic function for handling mkdir and create */
@@ -273,10 +277,11 @@ o9fs_read(void *v)
 	struct uio *uio;
 	struct ucred *cred;
 	struct o9fsfid *f;
-	int ioflag, error;
+	int ioflag, error, msize;
 	off_t offset;
 	char *buf;
 	long n;
+	int64_t len;
 
 	ap = v;
 	vp = ap->a_vp;
@@ -292,8 +297,12 @@ o9fs_read(void *v)
 	if (uio->uio_resid == 0)
 		return 0;
 
-	buf = (char *) malloc(2048, M_TEMP, M_WAITOK);
-	printf("resid = %d\n", uio->uio_resid);
+	len = uio->uio_resid;
+	msize = f->fs->msize - O9FS_IOHDRSZ;
+	if (len > msize)
+		len = msize;
+	buf = (char *) malloc(4096, M_TEMP, M_WAITOK);
+	printf("resid = %d len = %d\n", uio->uio_resid, len);
 	offset = uio->uio_offset;
 	n = o9fs_tread(VFSTOO9FS(vp->v_mount), f, buf, 4096, offset);
 	if (n > 0)
@@ -341,7 +350,7 @@ o9fs_write(void *v)
 		len = msize;
 	buf = (char *) malloc(len, M_TEMP, M_WAITOK);
 	error = uiomove(buf, len, uio);
-	n = o9fs_twrite(VFSTOO9FS(vp->v_mount), f, buf, len, n);
+	n = o9fs_twrite(VFSTOO9FS(vp->v_mount), f, buf, len, -1);
 	if (n < 0)
 		return -1;
 
@@ -387,29 +396,21 @@ o9fs_lookup(void *v)
 		return 0;
 	}
 	
-/*	o9fs_dumpchildlist(dfid); */
-
 	/* check if we have already looked up this */
 	fid = o9fs_fid_lookup(omnt, dfid, namep);
 	if (fid == NULL) {
-		printf("fid not found, walking\n");
-		/* this is the first lookup on this file
-		 * we have to walk to it from parent
-		 */
+		/* fid was not found, walk to it */
 		fid = o9fs_twalk(omnt, dfid, namep);
 		if (fid) {
-			/* fid was found, get it's info */
 			if ((o9fs_fstat(omnt, fid)) == NULL) {
 				printf("cannot stat %s\n", namep);
 				goto bad;
 			}
-
-			/* add new fid as a child of it's parent */
-			o9fs_insertfid(fid, dfid);
-		} else {
-			/* it is fine to fail walking when we are creating
-			 * or renaming on the last component of the path name
-			 */
+		} else { 
+		/* it is fine to fail walking when we are creating
+		 * or renaming on the last component of the path name
+		 */
+			goto bad;
 			if (islast && (nameiop == CREATE || nameiop == RENAME)) {
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, p);
 				if (error)
@@ -467,9 +468,9 @@ o9fs_getattr(void *v)
 	vap->va_blocksize = (*f->fs).msize;
 	getnanotime(&vap->va_atime);
 	vap->va_mtime.tv_sec = 0;
-	vap->va_mtime.tv_nsec = f->stat->mtime; /* convert to struct timespec */
+	vap->va_mtime.tv_nsec = 0; //f->stat->mtime; /* convert to struct timespec */
 	vap->va_ctime.tv_sec = 0;
-	vap->va_ctime.tv_nsec = f->stat->mtime; /* convert to struct timespec */
+	vap->va_ctime.tv_nsec = 0; // f->stat->mtime; /* convert to struct timespec */
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
@@ -483,7 +484,7 @@ o9fs_getattr(void *v)
 		vap->va_fileid = 2;
 	} else {
 		vap->va_type = vp->v_type;
-		vap->va_mode = o9fs_ptoumode(f->stat->mode); /* convert p9 -> unix mode */
+		vap->va_mode = 0; // o9fs_ptoumode(f->stat->mode); /* convert p9 -> unix mode */
 		vap->va_nlink = 1;
 		vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
 	}
@@ -507,13 +508,13 @@ o9fs_setattr(void *v)
 		printf(">setattr\n");
 
         if (ap->a_vp->v_flag & VROOT)
-                return (EACCES);
+                return EACCES;
 
         if (ap->a_vap->va_flags != VNOVAL)
                 return (EOPNOTSUPP);
 		printf("<setattr\n");
 
-        return (0);
+        return 0;
 }
 /* from usbf_realloc */
 static void *
