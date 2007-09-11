@@ -1,17 +1,18 @@
 /* based on src/lib9pclient/fsimpl.h and include/fcall.h from p9p */
 
 #define nelem(a) (sizeof(a) / sizeof(*a))
+#define RWSIZE 1024				/* size of rw transfers */
 
 /* 9p specific info */
 struct o9fs {
-	char version[7];			/* we only support 9P2000 anyway */
-	int msize;
-	int ref;
-	int fd;
-	int nextfid;
-	struct o9fsfid *rootfid;
-	struct o9fsfid *freefid;
-	struct rwlock	rwl;
+	char	version[7];
+	int	msize;
+/*	int	ref;
+	int	fd; */
+	int	nextfid;
+	struct	o9fsfid *rootfid;
+	struct	o9fsfid *freefid;
+	struct	rwlock rwl;
 };
 
 struct o9fsmount;
@@ -29,7 +30,7 @@ extern struct o9fs_io io_tcp;
 struct o9fsmount {
 	struct	mount *om_mp;		/* generic mount info */
 	struct	vnode *om_root;		/* local root of the tree */
-	struct	o9fs	om_o9fs;	/* 9P info */
+	struct	o9fs om_o9fs;		/* 9P info */
 
 	/* for use by transport routines */
 	struct	o9fs_io *io;		/* io routines */
@@ -40,9 +41,9 @@ struct o9fsmount {
 };
 
 struct o9fsqid {
-	u_int64_t path;
-	u_long vers;
-	u_char type;
+	u_int64_t	path;
+	u_long	vers;
+	u_char	type;
 };
 
 struct o9fsstat {
@@ -51,31 +52,31 @@ struct o9fsstat {
 	u_int	dev;	/* server subtype */
 	/* file data */
 	struct	o9fsqid qid;	/* unique id from server */
-	u_long	mode;	/* permissions */
-	u_long	atime;	/* last read time */
-	u_long	mtime;	/* last write time */
-	int64_t	length;	/* file length */	
-	char	*name;	/* last element of path */
-	char	*uid;	/* owner name */
-	char	*gid;	/* group name */
-	char	*muid;	/* last modifier name */
+	u_long	mode;			/* permissions */
+	u_long	atime;			/* last read time */
+	u_long	mtime;			/* last write time */
+	int64_t	length;			/* file length */	
+	char	*name;			/* last element of path */
+	char	*uid;			/* owner name */
+	char	*gid;			/* group name */
+	char	*muid;			/* last modifier name */
 };
 
 
 /* 9p file */
 TAILQ_HEAD(o9fsdir, o9fsfid);
 struct o9fsfid {
-	int					fid;
-	int					mode;			/* open mode */
-	int					opened;
-	struct o9fsqid		qid;
-	int64_t				offset;			/* rw offset */
-	struct o9fs			*fs;			/* our fs session */
-	struct vnode		*vp;			/* backpointer to vnode */
-	struct o9fsstat		*stat;
-	struct rwlock		rwl;
-	struct o9fsfid		*next;
-	struct o9fsdir		child;	
+	int	fid;
+	int	mode;				/* open mode */
+	int	opened;
+	struct o9fsqid qid;
+	int64_t	offset;			/* rw offset */
+	struct	o9fs *fs;		/* our 9p session */
+	struct	vnode *vp;		/* backpointer to vnode */
+	struct	o9fsstat *stat;
+	struct	rwlock rwl;
+	struct	o9fsfid *next;
+	struct	o9fsdir child;	
 	TAILQ_ENTRY(o9fsfid) fidlist;
 };
 
@@ -124,19 +125,19 @@ struct o9fsfcall
 #define	O9FS_GBIT16(p)	((p)[0]|((p)[1]<<8))
 #define	O9FS_GBIT32(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)))
 #define	O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
-				((int64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
+		((int64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
 
 #define	O9FS_PBIT8(p,v)	(p)[0]=(v)
 #define	O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8
 #define	O9FS_PBIT32(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24
 #define	O9FS_PBIT64(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24;\
-			(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
+		(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
 
-#define	O9FS_BIT8SZ			1
-#define	O9FS_BIT16SZ		2
-#define	O9FS_BIT32SZ		4
-#define	O9FS_BIT64SZ		8
-#define	O9FS_QIDSZ	(O9FS_BIT8SZ+O9FS_BIT32SZ+O9FS_BIT64SZ)
+#define	O9FS_BIT8SZ		1
+#define	O9FS_BIT16SZ	2
+#define	O9FS_BIT32SZ	4
+#define	O9FS_BIT64SZ	8
+#define	O9FS_QIDSZ		(O9FS_BIT8SZ+O9FS_BIT32SZ+O9FS_BIT64SZ)
 
 /* O9FS_STATFIXLEN includes leading 16-bit count */
 /* The count, however, excludes itself; total size is O9FS_BIT16SZ+count */
@@ -144,7 +145,7 @@ struct o9fsfcall
 
 #define	O9FS_NOTAG		(u_short)~0U	/* Dummy tag */
 #define	O9FS_NOFID		(uint32_t)~0U	/* Dummy fid */
-#define	O9FS_IOHDRSZ		24	/* ample room for Twrite/Rread header (iounit) */
+#define	O9FS_IOHDRSZ	24				/* ample room for Twrite/Rread header (iounit) */
 
 enum
 {
@@ -176,10 +177,7 @@ enum
 	O9FS_RSTAT,
 	O9FS_TWSTAT		= 126,
 	O9FS_RWSTAT,
-	O9FS_TMAX,
-
-	Topenfd = 	98,
-	Ropenfd
+	O9FS_TMAX
 };
 
 /* bits in Qid.type */
@@ -210,13 +208,13 @@ enum
 #define O9FS_ORDWR	2		/* read and write */
 #define O9FS_OEXEC	3		/* execute, == read but check execute permission */
 #define O9FS_OTRUNC	16		/* or'ed in (except for exec), truncate file first */
-#define O9FS_OCEXEC	32		/* or'ed in, close on exec */
+#define O9FS_OCEXEC		32		/* or'ed in, close on exec */
 #define O9FS_ORCLOSE	64		/* or'ed in, remove on close */
 #define O9FS_ODIRECT	128		/* or'ed in, direct access */
-#define O9FS_ONONBLOCK 256	/* or'ed in, non-blocking call */
-#define O9FS_OEXCL	0x1000	/* or'ed in, exclusive use (create only) */
-#define O9FS_OLOCK	0x2000	/* or'ed in, lock after opening */
+#define O9FS_ONONBLOCK	256		/* or'ed in, non-blocking call */
+#define O9FS_OEXCL		0x1000	/* or'ed in, exclusive use (create only) */
+#define O9FS_OLOCK		0x2000	/* or'ed in, lock after opening */
 #define O9FS_OAPPEND	0x4000	/* or'ed in, append only */
 
 
-#define O9FS_DIRMAX  (sizeof(struct o9fsstat)+65535U)   /* max length of o9fsstat structure */
+#define O9FS_DIRMAX		(sizeof(struct o9fsstat)+65535U)	/* max length of o9fsstat structure */
