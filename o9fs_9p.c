@@ -26,7 +26,7 @@ o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 		return error;
 	
 	omnt->om_o9fs.msize = rx.msize;
-	free(freep, M_TEMP);
+	free(freep, M_O9FS);
 	return 0;
 }
 
@@ -65,6 +65,28 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	return fid;
 }
 
+void
+o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
+{
+	struct o9fsfcall tx, rx;
+
+	rw_enter_read(&f->rwl);
+	if (f->opened == 0) {
+		rw_exit_read(&f->rwl);
+		return;
+	}
+	rw_exit_read(&f->rwl);
+
+	tx.type = O9FS_TCLUNK;
+	tx.fid = f->fid;
+	o9fs_rpc(omnt, &tx, &rx, 0);
+	rw_enter_write(&f->rwl);
+	f->opened = 0;
+	rw_exit_write(&f->rwl);
+	o9fs_putfid(omnt, f);
+}
+
+
 struct o9fsfid *
 o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 {
@@ -101,7 +123,8 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 	return f;
 
 fail:
-	o9fs_putfid(omnt, f);
+//	o9fs_putfid(omnt, f);
+	o9fs_fidclunk(omnt, f);
 	return NULL;
 }
 
@@ -137,10 +160,10 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 		return NULL;
 
 	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat) + rx.nstat,
-			M_TEMP, M_WAITOK);
+			M_O9FS, M_WAITOK);
 
 	n = o9fs_convM2D(rx.stat, rx.nstat, stat, (char *)&stat[1]);
-	free(freep, M_TEMP);
+	free(freep, M_O9FS);
 	if (n != rx.nstat)
 		printf("rx.nstat and convM2D disagree abour dir lenght\n");
 
@@ -173,7 +196,7 @@ o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
 
 long
 o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
-			long n, int64_t offset)
+			u_long n, int64_t offset)
 {
 	struct o9fsfcall tx, rx;
 	u_int msize;
@@ -207,7 +230,7 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		printf("tread:txoff %d foff %d\n", tx.offset, f->offset);
 	}
 
-	free(freep, M_TEMP);
+	free(freep, M_O9FS);
 	return rx.count;
 }
 

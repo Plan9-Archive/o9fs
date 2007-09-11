@@ -52,13 +52,12 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 }
 
 int
-mounto9fs(struct o9fs_args *args, struct mount *mp, 
-			char *path, char *host)
+mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
 {
 	struct o9fsmount *omnt;
 	struct vnode *rvp;
-	struct o9fsfid *fid, *tf;
-	struct o9fsstat *stat, *ts;
+	struct o9fsfid *fid;
+	struct o9fsstat *stat;
 	int error;
 
 	error = 0;
@@ -94,7 +93,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 		return error;
 	}
 
-	error = o9fs_tversion(omnt, 8192, "9P2000");
+	error = o9fs_tversion(omnt, 8192, O9FS_VERSION9P);
 	if (error)
 		return error;
 		
@@ -109,25 +108,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp,
 	omnt->om_o9fs.rootfid = fid;
 	omnt->om_o9fs.rootfid->stat = stat;
 	omnt->om_root->v_data = fid;
-	o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
-
-	return error;
-
-	{
-	long n;
-	char *buf;
-
-	buf = (char *) malloc(4096, M_TEMP, M_WAITOK);
-	strlcpy(buf, "test", 5);
-	tf = o9fs_twalk(omnt, omnt->om_o9fs.rootfid, "test/b");
-	ts = o9fs_fstat(omnt, tf);
-	o9fs_topen(omnt, tf, O9FS_OWRITE);
-
-	n = o9fs_twrite(omnt, tf, (void *)buf, 5, 0);
-	printf("written %d bytes\n", n);
-
-	free(buf, M_TEMP);
-	}
+	error = o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
 
 	return error;
 }
@@ -191,7 +172,7 @@ int
 o9fs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 {
 	sbp->f_bsize = DEV_BSIZE;
-	sbp->f_iosize = DEV_BSIZE;
+	sbp->f_iosize = VFSTOO9FS(mp)->om_o9fs.msize;
 	sbp->f_blocks = 2;              /* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
@@ -203,6 +184,7 @@ o9fs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
 	strlcpy(sbp->f_fstypename, mp->mnt_vfc->vfc_name, MFSNAMELEN);
+
 	return 0;
 }
 

@@ -41,9 +41,9 @@ o9fs_getfid(struct o9fsmount *omnt)
 				f[i-1].next = NULL;
 				fs->freefid = f;
         }
+		rw_init(&f->rwl, "fidlock");
         f = fs->freefid;
         fs->freefid = f->next;
-		rw_init(&f->rwl, "fidlock");
         f->offset = 0;
         f->mode = -1;
         f->qid.path = 0;
@@ -58,15 +58,16 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 		struct o9fs *fs;
         
 		fs = &omnt->om_o9fs;
-		free(f->stat, M_TEMP);
+		if (f->stat)
+			free(f->stat, M_TEMP);
 		f->stat = NULL;
 		f->next = fs->freefid;
 		fs->freefid = f;
 }
 
 int
-o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx,
-		void **freep)
+o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx, 
+	void **freep)
 {
 	int n, nn, error;
 	void *tpkt, *rpkt;
@@ -80,14 +81,15 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx,
 	
 	/* calculate the size and allocate a new fcall */
 	n = o9fs_sizeS2M(tx);
-	tpkt = malloc(n, M_TEMP, M_WAITOK);
+//	printf("tpkt = malloc(%d)\n", n);
+	tpkt = malloc(n, M_O9FS, M_WAITOK);
 
 	if (freep)
 		*freep = NULL;
 
 	nn = o9fs_convS2M(tx, tpkt, n);
 	if (nn != n) {
-		free(tpkt, M_TEMP);
+		free(tpkt, M_O9FS);
 		printf("size mismatch\n");
 		return EIO;
 	}
@@ -123,7 +125,9 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx,
 	}
 
 	n = O9FS_GBIT32(buf);
-	rpkt = malloc(n + 4, M_TEMP, M_WAITOK);
+//	printf("buf = %s\n", buf);
+//	printf("rpkt = malloc(%d)\n", n+4);
+	rpkt = malloc(n + 4, M_O9FS, M_WAITOK);
 
 	/* read the rest of the msg */
 	O9FS_PBIT32((u_char *)rpkt, n);
@@ -141,25 +145,25 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx,
 		printf("receive error\n");
 		return error;
 	}
-	free(tpkt, M_TEMP);
+	free(tpkt, M_O9FS);
 
 	n = O9FS_GBIT32((u_char *) rpkt);
 	nn = o9fs_convM2S(rpkt, n, rx);
 	if (nn != n) {
-		free(rpkt, M_TEMP);
+		free(rpkt, M_O9FS);
 		return EIO;
 	}
 
 	if (rx->type == O9FS_RERROR) {
-		free(rpkt, M_TEMP);
+		free(rpkt, M_O9FS);
 		printf("%s\n", rx->ename);
-		return EIO;
+		return -1;
 	}
 
 	if (freep)
 		*freep = rpkt;
 	else
-		free(rpkt, M_TEMP);
+		free(rpkt, M_O9FS);
 
 	return error;
 }
@@ -404,6 +408,10 @@ o9fs_uflags2omode(int uflags)
 		omode = O9FS_ORDWR;
 		break;
 	}
+
+	/* XXX u9fs specific? */
+	if (uflags & FFLAGS(O_CREAT))
+	;//	omode |= O9FS_OEXEC;
 
 	return omode;
 }
