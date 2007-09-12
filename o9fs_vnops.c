@@ -241,8 +241,6 @@ o9fs_create(void *v)
 	rw_exit_write(&f->rwl);
 
 out:
-/*	if (error || !(cnp->cn_flags & SAVESTART))
-		PNBUF_PUT(cnp->cn_pnbuf); */
 	vput(dvp);
 	
 	return error;
@@ -433,12 +431,12 @@ o9fs_lookup(void *v)
 		*vpp = dvp;
 		return 0;
 	}
-	
+
 	/* check if we have already looked up this */
 	fid = o9fs_fid_lookup(omnt, dfid, namep);
 	if (fid == NULL) {
 		/* fid was not found, walk to it */
-		fid = o9fs_twalk(omnt, dfid, namep);
+		fid = o9fs_twalk(omnt, dfid->fid, namep);
 		if (fid) {
 			if ((o9fs_fstat(omnt, fid)) == NULL) {
 				printf("cannot stat %s\n", namep);
@@ -587,8 +585,8 @@ o9fs_reclaim(void *v)
 	vp = ap->a_vp;
 
 	cache_purge(vp);
-	o9fs_freevp(vp);
 	o9fs_fidclunk(VFSTOO9FS(vp->v_mount), VTO9(vp));
+	o9fs_freevp(vp);
 
 	return 0;
 }

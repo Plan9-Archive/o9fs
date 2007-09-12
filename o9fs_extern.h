@@ -23,7 +23,7 @@ int		o9fs_tversion(struct o9fsmount *, int, char *);
 struct	o9fsfid *o9fs_tattach(struct o9fsmount *, struct o9fsfid *, char *, char *);
 struct	o9fsstat *o9fs_tstat(struct o9fsmount *, char *);
 struct	o9fsstat *o9fs_fstat(struct o9fsmount *, struct o9fsfid *);
-struct	o9fsfid *o9fs_twalk(struct o9fsmount *, struct o9fsfid *, char *);
+struct	o9fsfid *o9fs_twalk(struct o9fsmount *, int, char *);
 int		o9fs_topen(struct o9fsmount *, struct o9fsfid *, int);
 long	o9fs_tread(struct o9fsmount *, struct o9fsfid *, void *, u_long, int64_t);
 long	o9fs_twrite(struct o9fsmount *, struct o9fsfid *, void *, long, int64_t);

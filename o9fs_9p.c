@@ -88,7 +88,7 @@ o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
 
 
 struct o9fsfid *
-o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
+o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 {
 	struct o9fsfcall tx, rx;
 	struct o9fsfid *f;
@@ -104,13 +104,14 @@ o9fs_twalk(struct o9fsmount *omnt, struct o9fsfid *fid, char *oname)
 	}
 	
 	n = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
+	printf("walk name = %s\n", name);
 	f = o9fs_getfid(omnt);
 	
 	tx.tag = 0;
 	tx.type = O9FS_TWALK;
-	tx.fid = fid->fid;
+	tx.fid = fid;
 	tx.newfid = f->fid;
-	tx.nwname = n;
+	tx.nwname = 1;
 		
 	if ((o9fs_rpc(omnt, &tx, &rx, 0)) != 0)
 		goto fail;
@@ -134,7 +135,7 @@ o9fs_tstat(struct o9fsmount *omnt, char *name)
 	struct o9fsstat *stat;
 	struct o9fsfid *fid;
 
-	if ((fid = o9fs_twalk(omnt, omnt->om_o9fs.rootfid, name)) == NULL)
+	if ((fid = o9fs_twalk(omnt, omnt->om_o9fs.rootfid->fid, name)) == NULL)
 		return NULL;
 		
 	stat = o9fs_fstat(omnt, fid);
