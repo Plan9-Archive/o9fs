@@ -35,7 +35,7 @@ o9fs_getfid(struct o9fsmount *omnt)
 						f[i].next = &f[i+1];
 						f[i].fs = fs;
 						f[i].stat = NULL;
-						f[i].vp = NULLVP;
+						f[i].vp = NULL;
 						f[i].opened = 0;
                 }
 				f[i-1].next = NULL;
@@ -61,6 +61,8 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 		if (f->stat)
 			free(f->stat, M_TEMP);
 		f->stat = NULL;
+		if (f->vp)
+			f->vp = NULL;
 		f->next = fs->freefid;
 		fs->freefid = f;
 }
@@ -226,7 +228,7 @@ o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
 /*
  * Allocates a new vnode for the fid or returns a new reference to
  * an existing one if the fid had already a vnode referencing it.  The
- * resulting locked vnode is returned in *vpp.
+ed in *vpp.
  */	
 int
 o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long flags)
@@ -237,10 +239,10 @@ o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long f
 
 	p = curproc;
 	
-	if (fid->vp != NULL) {
-		vp = fid->vp;
-		vget(vp, LK_EXCLUSIVE | LK_RETRY, p);
+	if (fid->vp) {
+		vget(fid->vp, LK_EXCLUSIVE | LK_RETRY, p);
 		error = 0;
+		vp = fid->vp;
 		goto out;
 	}
 	
@@ -260,8 +262,7 @@ o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long f
 	fid->vp = vp;
 	if (fid->qid.type == O9FS_QTDIR) {
 		vp->v_type = VDIR;
-		TAILQ_INIT(&fid->child);
-		printf("%d dir head inited\n", fid->fid);
+//		TAILQ_INIT(&fid->child);
 	}
 	else
 		vp->v_type = VREG;
