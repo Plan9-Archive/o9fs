@@ -115,6 +115,7 @@ o9fs_open(void *v)
 
 	rw_enter_read(&f->rwl);
 	if (f->opened == 1) {
+		printf("fid already opened\n");
 		rw_exit_read(&f->rwl);
 		return 0;
 	} else
@@ -505,30 +506,25 @@ o9fs_getattr(void *v)
 	vap->va_uid = 0;
 	vap->va_gid = 0;
 	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
-	vap->va_size = DEV_BSIZE;
+	vap->va_size = f->stat->length;
 	vap->va_blocksize = (*f->fs).msize;
-	getnanotime(&vap->va_atime);
-	vap->va_mtime.tv_sec = 0;
-	vap->va_mtime.tv_nsec = 0; //f->stat->mtime; /* convert to struct timespec */
-	vap->va_ctime.tv_sec = 0;
-	vap->va_ctime.tv_nsec = 0; // f->stat->mtime; /* convert to struct timespec */
+	vap->va_atime.tv_sec = f->stat->atime;
+	vap->va_mtime.tv_sec = f->stat->mtime;
+	vap->va_ctime.tv_sec = f->stat->atime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
 	vap->va_bytes = 0;
 	if (vp->v_flag & VROOT) {
 		vap->va_type = VDIR;
-		vap->va_mode = S_IRUSR|S_IWUSR|S_IXUSR|
-						S_IRGRP|S_IWGRP|S_IXGRP|
-						S_IROTH|S_IWOTH|S_IXOTH;
-		vap->va_nlink = 2;
 		vap->va_fileid = 2;
-	} else {
-		vap->va_type = vp->v_type;
-		vap->va_mode = 0777; // o9fs_ptoumode(f->stat->mode); /* convert p9 -> unix mode */
-		vap->va_nlink = 1;
-		vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
 	}
+	
+	vap->va_type = vp->v_type;
+	vap->va_mode = o9fs_ptoumode(f->stat->mode);
+	vap->va_nlink = 0;
+	vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
+	vap->va_filerev = f->qid.vers;
 
 	return 0;
 }

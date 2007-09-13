@@ -380,12 +380,11 @@ o9fs_ptoumode(int mode)
 {
 	int umode;
 	
-	umode = mode & 0777;
+	umode = mode & (0777|O9FS_DMDIR);
+
 	if ((mode & O9FS_DMDIR) == O9FS_DMDIR)
 		umode |= S_IFDIR;
-	else
-		umode |= S_IFREG;
-	
+
 	return umode;
 }
 
