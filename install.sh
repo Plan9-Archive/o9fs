@@ -23,4 +23,10 @@ addfiles() {
 	cat files.o9fs >> /usr/src/sys/conf/files
 }
 
+patch() {
+	cd /usr/src
+	patch -p0 < /usr/src/sys/$o9fsroot
+}
+
 addfiles
+patch
