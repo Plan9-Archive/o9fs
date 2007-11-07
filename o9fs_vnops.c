@@ -29,12 +29,12 @@ int o9fs_getattr(void *);
 int o9fs_setattr(void *);
 int o9fs_read(void *);
 int o9fs_write(void *);
+int o9fs_mkdir(void *);
 #define	o9fs_ioctl	(int (*)(void *))enoioctl
 #define	o9fs_fsync	nullop
 #define	o9fs_remove	eopnotsupp
 #define	o9fs_link	eopnotsupp
 #define	o9fs_rename	eopnotsupp
-#define	o9fs_mkdir	eopnotsupp
 #define	o9fs_rmdir	eopnotsupp
 #define	o9fs_symlink	eopnotsupp
 int o9fs_readdir(void *);
@@ -113,13 +113,19 @@ o9fs_open(void *v)
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
 
+	printf("entering readlock\n");
 	rw_enter_read(&f->rwl);
+	printf("[in realock]\n");
 	if (f->opened == 1) {
-		printf("fid already opened\n");
+		printf("fid %d already opened\n", f->fid);
+		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
 		return 0;
-	} else
+	} else {
+		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
+	}
+	printf("[out readlock\n");
 
 	tx.tag = 0;
 	tx.type = O9FS_TOPEN;
@@ -130,10 +136,14 @@ o9fs_open(void *v)
 	if (error)
 		return -1;
 	
+	printf("entering writelock\n");
 	rw_enter_write(&f->rwl);
+	printf("[in writelock]\n");
 	f->mode = mode;
 	f->opened = 1;
+	printf("exiting writelock\n");
 	rw_exit_write(&f->rwl);
+	printf("[out writelock]\n");
 
 	return 0;
 }
@@ -197,14 +207,15 @@ o9fs_create(void *v)
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
 	struct o9fsstat *stat;
-	int error;
+	int error, isdir;
 	
-	printf(">create\n");
 	ap = v;
 	dvp = ap->a_dvp;
 	cnp = ap->a_cnp;
 	vap = ap->a_vap;
 	vpp = ap->a_vpp;
+
+	isdir = vap->va_mode & S_IFDIR;
 
 	*vpp = NULL;
 	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat), M_O9FS, M_WAITOK);
@@ -222,12 +233,14 @@ o9fs_create(void *v)
 	tx.type = O9FS_TCREATE;
 	tx.name = cnp->cn_nameptr;
 	tx.fid = f->fid;
-//	tx.mode = vap->va_mode; /* XXX convert */
-	tx.mode = O9FS_OWRITE;
-	tx.perm = 0777;  
+	tx.mode = o9fs_uflags2omode(vap->va_mode);
+	if (isdir)
+		tx.perm = o9fs_utopmode(vap->va_mode) & (~0777 | (f->stat->mode & 0777));
+	else
+		tx.perm = o9fs_utopmode(vap->va_mode) & (~0666 | (f->stat->mode & 0666));
 
 	error = o9fs_rpc(omnt, &tx, &rx, 0);
-	if (error)
+	if (error == -1)
 		goto out;
 
 	error = o9fs_allocvp(dvp->v_mount, f, vpp, 0);
@@ -238,13 +251,32 @@ o9fs_create(void *v)
 
 	rw_enter_write(&f->rwl);
 	f->mode = O9FS_OWRITE;
-	f->opened = 1; /* XXX is this always true? */
+	if (!isdir)
+		f->opened = 1; /* XXX is this always true? */
 	rw_exit_write(&f->rwl);
 
 out:
 	vput(dvp);
 	
 	return error;
+}
+
+int
+o9fs_mkdir(void *v)
+{
+	struct vop_create_args *ap;
+	struct vnode *dvp, **vpp;
+	struct componentname *cnp;
+	struct vattr *vap;
+
+	ap = v;
+	dvp = ap->a_dvp;
+	cnp = ap->a_cnp;
+	vap = ap->a_vap;
+	vpp = ap->a_vpp;
+
+	vap->va_mode |= S_IFDIR;
+	return VOP_CREATE(dvp, vpp, cnp, vap);
 }
 
 int
@@ -301,7 +333,6 @@ o9fs_readdir(void *v)
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
 	struct o9fsstat *stat;
-	struct dirent d;
 	u_char buf[RWSIZE];
 	long n, ts;
 	int error, *eofflag;
@@ -317,36 +348,43 @@ o9fs_readdir(void *v)
 	error = 0;
 
 	ts = uio->uio_offset;
-	printf("ts = %d\n", ts);
-	n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1);
-	printf("read %d bytes\n", n);
-	if (n <= 0)
-			return ENOTDIR;
-	ts += n;
-	printf("n %d ts %d\n", n, ts);
-	
-	if (ts >= 0) {
-		ts = o9fs_dirpackage(buf, ts, &stat);
-		if (ts < 0)
-			printf("malformed directory contents\n");
-	}
-	
-	d.d_fileno = (u_int32_t)stat->qid.path;
-	d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-	d.d_namlen = strlen(stat->name);
-	strlcpy(d.d_name, stat->name, d.d_namlen+1);
-	d.d_reclen = DIRENT_SIZE(&d);
 
-	printf("d_name = %s\n", d.d_name);
-	return 0;
-	error = uiomove(&d, d.d_reclen, uio);
-	if (ts == 0 && n < 0)
-		return -1;
+	do {
+		int i;
+		n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1);
+		printf("read %d bytes\n", n);
+		if (n < 0)
+			return ENOTDIR;
+		if (n == 0)
+			return 0;
+
+		ts += n;
+	
+		if (ts >= 0) {
+			ts = o9fs_dirpackage(buf, ts, &stat);
+			if (ts < 0)
+				printf("malformed directory contents\n");
+		}
+
+		for (i = 0; i < ts; i++) {
+			struct dirent d;
+
+			d.d_fileno = (u_int32_t)stat[i].qid.path;
+			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
+			d.d_namlen = strlen(stat[i].name);
+			strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
+			d.d_reclen = DIRENT_SIZE(&d);
+
+			error = uiomove(&d, d.d_reclen, uio);
+			printf("stat[%d]->name = %s\n", i, d.d_name);
+		}
+		
+		if (ts == 0 && n < 0)
+			return -1;
+	} while(n > 0);
 
 	return error;
 }
-
-
 
 int
 o9fs_write(void *v)
@@ -444,17 +482,15 @@ o9fs_lookup(void *v)
 				goto bad;
 			}
 		} else { 
-		/* it is fine to fail walking when we are creating
-		 * or renaming on the last component of the path name
-		 */
-			//goto bad;
+			/* it is fine to fail walking when we are creating
+	 		 * or renaming on the last component of the path name
+	 		 */
 			if (islast && (nameiop == CREATE || nameiop == RENAME)) {
-				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, p);
-				if (error)
-					goto bad;
+				printf("lookup: creating\n");
 				/* save the name. it's gonna be used soon */
 				cnp->cn_flags |= SAVENAME;
 				error = EJUSTRETURN;
+				return error;
 				goto lockngo;
 			} else
 				/* it wasn't found at all */
@@ -467,6 +503,7 @@ o9fs_lookup(void *v)
 		goto bad;
 
 lockngo:
+	printf("lookup: lockngo\n");
 	/* fix locking on parent dir */
 	if (islast && !(cnp->cn_flags & LOCKPARENT)) {
 		VOP_UNLOCK(dvp, 0, p);
@@ -496,7 +533,6 @@ o9fs_getattr(void *v)
 	vap = ap->a_vap;
 	f = VTO9(vp);
 	
-	printf("getattr\n");
 	stat = o9fs_fstat(VFSTOO9FS(vp->v_mount), f);
 	if (stat == NULL)
 		return -1;
@@ -519,7 +555,6 @@ o9fs_getattr(void *v)
 		vap->va_type = VDIR;
 		vap->va_fileid = 2;
 	}
-	
 	vap->va_type = vp->v_type;
 	vap->va_mode = o9fs_ptoumode(f->stat->mode);
 	vap->va_nlink = 0;
@@ -532,12 +567,9 @@ o9fs_getattr(void *v)
 int
 o9fs_setattr(void *v)
 {
-        struct vop_setattr_args /* {
-                struct vnode *a_vp;
-                struct vattr *a_vap;
-                struct ucred *a_cred;
-                struct proc *a_p;
-        } */ *ap = v;
+        struct vop_setattr_args *ap;
+
+		ap = v;
 
         /*
          * Can't mess with the root vnode
@@ -548,7 +580,7 @@ o9fs_setattr(void *v)
                 return EACCES;
 
         if (ap->a_vap->va_flags != VNOVAL)
-                return (EOPNOTSUPP);
+                return EOPNOTSUPP;
 		printf("<setattr\n");
 
         return 0;
