@@ -82,6 +82,7 @@ o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
 	o9fs_rpc(omnt, &tx, &rx, 0);
 	rw_enter_write(&f->rwl);
 	f->opened = 0;
+	f->mode = -1;
 	rw_exit_write(&f->rwl);
 	o9fs_putfid(omnt, f);
 }
@@ -97,9 +98,13 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	
 	name = oname;
 	if (name) {
-		temp = (char *) malloc((strlen(name)+1) * sizeof(char),
+		size_t len;
+		len = strlen(name)+1;
+		temp = (char *) malloc(len * sizeof(char),
 				M_TEMP, M_WAITOK);
-		strlcpy(temp, name, strlen(name)+1);
+//		strlcpy(temp, name, strlen(name)+1);
+		memcpy(temp, name, len);
+		temp[len] = '\0';
 		name = temp;
 	}
 	
@@ -124,7 +129,6 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	return f;
 
 fail:
-//	o9fs_putfid(omnt, f);
 	o9fs_fidclunk(omnt, f);
 	return NULL;
 }
@@ -139,7 +143,6 @@ o9fs_tstat(struct o9fsmount *omnt, char *name)
 		return NULL;
 		
 	stat = o9fs_fstat(omnt, fid);
-/*	fidclose(omnt, fid); */
 	
 	return stat;
 }
@@ -193,7 +196,6 @@ o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
 
 	return 0;
 }
-
 
 long
 o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
