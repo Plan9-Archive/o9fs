@@ -1,0 +1,126 @@
+Index: src/sys/kern/vfs_conf.c
+===================================================================
+RCS file: /cvs/src/sys/kern/vfs_conf.c,v
+retrieving revision 1.33
+diff -u -p -u -r1.33 vfs_conf.c
+--- src/sys/kern/vfs_conf.c	2007/06/01 05:37:14	1.33
++++ src/sys/kern/vfs_conf.c	2007/11/07 22:55:54
+@@ -119,6 +119,10 @@ extern  const struct vfsops ntfs_vfsops;
+ extern  const struct vfsops udf_vfsops;
+ #endif
+ 
++#ifdef O9FS
++extern	const struct vfsops o9fs_vfsops;
++#endif
++
+ /*
+  * Set up the filesystem operations for vnodes.
+  */
+@@ -177,6 +181,11 @@ static struct vfsconf vfsconflist[] = {
+ 	{ &udf_vfsops, MOUNT_UDF, 13, 0, MNT_LOCAL, NULL, NULL },
+ #endif
+ 
++	/* O9FS Filesystem */
++#ifdef O9FS
++	{ &o9fs_vfsops, MOUNT_O9FS, 0, 0, 0, NULL, NULL },
++#endif
++
+ };
+ 
+ 
+@@ -216,6 +225,7 @@ extern struct vnodeopv_desc ext2fs_fifoo
+ extern struct vnodeopv_desc xfs_vnodeop_opv_desc;
+ extern struct vnodeopv_desc ntfs_vnodeop_opv_desc;
+ extern struct vnodeopv_desc udf_vnodeop_opv_desc;
++extern struct vnodeopv_desc o9fs_vnodeop_opv_desc;
+ 
+ struct vnodeopv_desc *vfs_opv_descs[] = {
+ 	&sync_vnodeop_opv_desc,
+@@ -272,6 +282,9 @@ struct vnodeopv_desc *vfs_opv_descs[] = 
+ #endif
+ #ifdef UDF
+ 	&udf_vnodeop_opv_desc,
++#endif
++#ifdef O9FS
++	&o9fs_vnodeop_opv_desc,
+ #endif
+ 
+ 	NULL
+Index: src/sys/sys/mount.h
+===================================================================
+RCS file: /cvs/src/sys/sys/mount.h,v
+retrieving revision 1.81
+diff -u -p -u -r1.81 mount.h
+--- src/sys/sys/mount.h	2007/06/01 05:37:14	1.81
++++ src/sys/sys/mount.h	2007/11/07 22:55:55
+@@ -248,6 +248,13 @@ struct udf_args {
+ 	u_int32_t lastblock; /* Special device last block */
+ };
+ 
++/* Argument to mount O9FS file systems */
++struct o9fs_args {
++	char	*hostname;	/* 9p server path */
++	struct sockaddr *saddr;	/* server addr */
++	size_t saddrlen;	/* addr size */	
++}; 
++	
+ /*
+  * Arguments to mount procfs filesystems
+  */
+@@ -342,6 +349,7 @@ struct ostatfs {
+ #define	MOUNT_XFS	"xfs"		/* xfs */
+ #define	MOUNT_NTFS	"ntfs"		/* NTFS */
+ #define	MOUNT_UDF	"udf"		/* UDF */
++#define MOUNT_O9FS	"o9fs"		/* O9FS */
+ 
+ /*
+  * Structure per mounted file system.  Each mounted file system has an
+Index: src/sys/sys/malloc.h
+===================================================================
+RCS file: /cvs/src/sys/sys/malloc.h,v
+retrieving revision 1.88
+diff -u -p -u -r1.88 malloc.h
+--- src/sys/sys/malloc.h	2007/09/18 08:13:49	1.88
++++ src/sys/sys/malloc.h	2007/11/07 22:55:56
+@@ -178,8 +178,9 @@
+ #define M_UDFFID	142	/* UDF file id */
+ 
+ #define	M_BTHIDEV	143	/* Bluetooth HID */
++#define M_O9FS		144	/* O9FS stuff */
+ 
+-#define	M_LAST		144	/* Must be last type + 1 */
++#define	M_LAST		145	/* Must be last type + 1 */
+ 
+ #define	INITKMEMNAMES { \
+ 	"free",		/* 0 M_FREE */ \
+@@ -311,6 +312,7 @@
+ 	"UDF file entry",	/* 141 M_UDFFENTRY */ \
+ 	"UDF file id",	/* 142 M_UDFFID */ \
+ 	"Bluetooth HID",	/* 143 M_BTHIDEV */ \
++	"O9FS",		/* 144 M_O9FS */ \
+ }
+ 
+ struct kmemstats {
+Index: src/sys/sys/vnode.h
+===================================================================
+RCS file: /cvs/src/sys/sys/vnode.h,v
+retrieving revision 1.88
+diff -u -p -u -r1.88 vnode.h
+--- src/sys/sys/vnode.h	2007/06/14 20:36:34	1.88
++++ src/sys/sys/vnode.h	2007/11/07 22:55:56
+@@ -65,13 +65,13 @@ enum vtype	{ VNON, VREG, VDIR, VBLK, VCH
+ enum vtagtype	{
+ 	VT_NON, VT_UFS, VT_NFS, VT_MFS, VT_MSDOSFS,
+ 	VT_PORTAL, VT_PROCFS, VT_AFS, VT_ISOFS, VT_ADOSFS,
+-	VT_EXT2FS, VT_VFS, VT_XFS, VT_NTFS, VT_UDF
++	VT_EXT2FS, VT_VFS, VT_XFS, VT_NTFS, VT_UDF, VT_O9FS
+ };
+ 
+ #define	VTAG_NAMES \
+     "NON", "UFS", "NFS", "MFS", "MSDOSFS",			\
+     "PORTAL", "PROCFS", "AFS", "ISOFS", "ADOSFS",		\
+-    "EXT2FS", "VFS", "XFS", "NTFS", "UDF"
++    "EXT2FS", "VFS", "XFS", "NTFS", "UDF", "O9FS"
+ 
+ /*
+  * Each underlying filesystem allocates its own private area and hangs
