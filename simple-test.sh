@@ -12,10 +12,12 @@ usage() {
 [[ -z $1 ]] && usage
 
 mntp="$1"
-testfile="$mntp/test0"
+testdir="$mntp/testdir"
+testfile="$testdir/test0"
 
 readdir="ls -l $mntp"
 stat="stat $mntp"
+mkdir="mkdir $testdir"
 create="touch $testfile"
 write="echo test0 > $testfile"
 read="cat $testfile"
@@ -28,6 +30,9 @@ echo
 echo "stat(), $stat"
 $stat
 echo
+echo "mkdir(), $mkdir"
+$mkdir
+echo 
 echo "create(), $create"
 $create
 echo
