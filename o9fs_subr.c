@@ -389,29 +389,43 @@ o9fs_ptoumode(int mode)
 }
 
 int
+o9fs_utopmode(int mode)
+{
+	int pmode;
+
+	pmode = mode & (0777|S_IFDIR);
+
+	if ((mode & S_IFDIR) == S_IFDIR)
+		pmode |= O9FS_DMDIR;
+
+	return pmode;
+}
+
+int
 o9fs_uflags2omode(int uflags)
 {
 	int omode;
 	
-	omode = 0;
-
 	switch(uflags & O_ACCMODE) {
-	default:
-		return -1;
 	case FREAD:
+		printf("uf: READ\n");
 		omode = O9FS_OREAD;
 		break;
 	case FWRITE:
+		printf("uf: WRITE\n");
 		omode = O9FS_OWRITE;
 		break;
 	case (FREAD|FWRITE):
+		printf("uf: RDWR\n");
 		omode = O9FS_ORDWR;
 		break;
 	}
 
 	/* XXX u9fs specific? */
-	if (uflags & FFLAGS(O_CREAT))
-	;//	omode |= O9FS_OEXEC;
+	if (uflags & O_CREAT) {
+		printf("uf: creating\n");
+		omode = O9FS_OEXEC;
+	}
 
 	return omode;
 }

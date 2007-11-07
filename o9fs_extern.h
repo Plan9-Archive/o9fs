@@ -10,6 +10,7 @@ struct o9fsfid *o9fs_getfid(struct o9fsmount *);
 void	o9fs_putfid(struct o9fsmount *, struct o9fsfid *);
 long	o9fs_dirpackage(u_char *, long, struct o9fsstat **);
 int		o9fs_ptoumode(int);
+int		o9fs_utopmode(int);
 int		o9fs_uflags2omode(int);
 
 /* o9fs_io.c */
