@@ -25,7 +25,7 @@ addfiles() {
 
 patch() {
 	cd /usr/src
-	patch -p0 < /usr/src/sys/$o9fsroot
+	patch -p0 < /usr/src/sys/$o9fsroot/openbsd-headers.diff
 }
 
 addfiles
