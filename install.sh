@@ -5,9 +5,10 @@
 # JUL/2007
 
 o9fsroot=miscfs/o9fs
+srcroot=/usr/src
 
 addfiles() {
-	cp /usr/src/sys/conf/files /usr/src/sys/conf/files.old
+	cp $srcroot/sys/conf/files $srcroot/sys/conf/files.old
 
 	[[ -f files.o9fs ]] && rm -f files.o9fs
 
@@ -16,16 +17,16 @@ addfiles() {
 		echo "file $o9fsroot/$f		o9fs" >> files.o9fs
 	done
 
-	exist=$(grep o9fs /usr/src/sys/conf/files)
+	exist=$(grep o9fs $srcroot/sys/conf/files)
 	[[ ! -z $exist ]] && exit 0
 
-	echo >> /usr/src/sys/conf/files
-	cat files.o9fs >> /usr/src/sys/conf/files
+	echo >> $srcroot/sys/conf/files
+	cat files.o9fs >> $srcroot/sys/conf/files
 }
 
 patch() {
-	cd /usr/src
-	patch -p0 < /usr/src/sys/$o9fsroot/openbsd-headers.diff
+	cd $srcroot
+	patch -p1 < sys/$o9fsroot/openbsd-headers.diff
 }
 
 addfiles
