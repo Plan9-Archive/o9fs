@@ -1,0 +1,8 @@
+- o9fs_conv* needs checking for overflows
+- o9fs_{read,write,readdir} should use malloc (or pools) for buffers
+
+bugs:
+cannot unmount without forcing
+connect doesn't check if socket is connected to send data
+sometimes system is locked during sync before reboot
+deadlock in VOP_OPEN when trying to acquire the readlock
