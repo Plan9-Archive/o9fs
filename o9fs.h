@@ -40,10 +40,24 @@ struct o9fsmount {
 	sa_family_t	om_sotype;		/* socket type */
 };
 
+enum o9fs_msgmode {
+	O9FS_MLOAD,
+	O9FS_MSTORE
+};
+
+/* structure containing the raw stream of bytes for a 9P message */
+struct o9fsmsg {
+	u_char	*m_base;
+	u_char	*m_cur;
+	u_char	*m_end;
+	size_t	m_size;
+	enum o9fs_msgmode m_mode;
+};
+
 struct o9fsqid {
-	u_int64_t	path;
-	u_long	vers;
-	u_char	type;
+	uint64_t	path;
+	uint32_t	vers;
+	uint8_t		type;
 };
 
 struct o9fsstat {
@@ -52,9 +66,9 @@ struct o9fsstat {
 	u_int	dev;	/* server subtype */
 	/* file data */
 	struct	o9fsqid qid;	/* unique id from server */
-	u_long	mode;			/* permissions */
-	u_long	atime;			/* last read time */
-	u_long	mtime;			/* last write time */
+	uint32_t	mode;			/* permissions */
+	uint32_t	atime;			/* last read time */
+	uint32_t	mtime;			/* last write time */
 	int64_t	length;			/* file length */	
 	char	*name;			/* last element of path */
 	char	*uid;			/* owner name */
@@ -69,6 +83,7 @@ struct o9fsfid {
 	int	fid;
 	int	mode;				/* open mode */
 	int	opened;
+	int ref;				/* reference count */
 	struct o9fsqid qid;
 	int64_t	offset;			/* rw offset */
 	struct	o9fs *fs;		/* our 9p session */
@@ -146,6 +161,11 @@ struct o9fsfcall
 #define	O9FS_NOTAG		(u_short)~0U	/* Dummy tag */
 #define	O9FS_NOFID		(uint32_t)~0U	/* Dummy fid */
 #define	O9FS_IOHDRSZ	24				/* ample room for Twrite/Rread header (iounit) */
+
+#define O9FS_BYTE	1
+#define O9FS_WORD	2
+#define O9FS_DWORD	4
+#define O9FS_QWORD	8
 
 enum
 {

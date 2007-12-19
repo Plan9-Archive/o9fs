@@ -41,7 +41,7 @@ o9fs_getfid(struct o9fsmount *omnt)
 				f[i-1].next = NULL;
 				fs->freefid = f;
         }
-		rw_init(&f->rwl, "fidlock");
+	//	rw_init(&f->rwl, "fidlock");
         f = fs->freefid;
         fs->freefid = f->next;
         f->offset = 0;
@@ -59,7 +59,8 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
         
 		fs = &omnt->om_o9fs;
 		if (f->stat)
-			free(f->stat, M_TEMP);
+		//	free(f->stat, M_TEMP);
+			o9fs_freestat(f->stat);
 		f->stat = NULL;
 		if (f->vp)
 			f->vp = NULL;
@@ -67,108 +68,42 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 		fs->freefid = f;
 }
 
-int
-o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx, 
-	void **freep)
+void
+o9fs_freestat(struct o9fsstat *s)
 {
-	int n, nn, error;
-	void *tpkt, *rpkt;
-	u_char buf[4];
-	struct uio auio;
-	struct iovec aiov;
-	struct proc *p;
-	
-	p = curproc;
-	error = 0;
-	
-	/* calculate the size and allocate a new fcall */
-	n = o9fs_sizeS2M(tx);
-//	printf("tpkt = malloc(%d)\n", n);
-	tpkt = malloc(n, M_O9FS, M_WAITOK);
-
-	if (freep)
-		*freep = NULL;
-
-	nn = o9fs_convS2M(tx, tpkt, n);
-	if (nn != n) {
-		free(tpkt, M_O9FS);
-		printf("size mismatch\n");
-		return EIO;
-	}
-
-	aiov.iov_base = tpkt;
-	aiov.iov_len = auio.uio_resid = n;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_offset = 0;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_rw = UIO_WRITE;
-	auio.uio_procp = p;
-
-	error = omnt->io->write(omnt, &auio);
-	if (error) {
-		printf("failed sending 9p message\n");
-		return error;
-	}
-
-	/* get msg size */
-	aiov.iov_base = buf;
-	aiov.iov_len = auio.uio_resid = 4;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_procp = p;
-
-	error = omnt->io->read(omnt, &auio);
-	if (error) {
-		printf("receive error\n");
-		return error;
-	}
-
-	n = O9FS_GBIT32(buf);
-//	printf("buf = %s\n", buf);
-//	printf("rpkt = malloc(%d)\n", n+4);
-	rpkt = malloc(n + 4, M_O9FS, M_WAITOK);
-
-	/* read the rest of the msg */
-	O9FS_PBIT32((u_char *)rpkt, n);
-
-	aiov.iov_base = rpkt + 4;
-	aiov.iov_len = auio.uio_resid = n - 4;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_procp = p;
-	
-	error = omnt->io->read(omnt, &auio);
-	if (error) {
-		printf("receive error\n");
-		return error;
-	}
-	free(tpkt, M_O9FS);
-
-	n = O9FS_GBIT32((u_char *) rpkt);
-	nn = o9fs_convM2S(rpkt, n, rx);
-	if (nn != n) {
-		free(rpkt, M_O9FS);
-		return EIO;
-	}
-
-	if (rx->type == O9FS_RERROR) {
-		free(rpkt, M_O9FS);
-		printf("%s\n", rx->ename);
-		return -1;
-	}
-
-	if (freep)
-		*freep = rpkt;
-	else
-		free(rpkt, M_O9FS);
-
-	return error;
+	free(s->name, M_O9FS);
+	free(s->uid, M_O9FS);
+	free(s->gid, M_O9FS);
+	free(s->muid, M_O9FS);
+	s->name = s->uid = s->gid = s->muid = NULL;
 }
+
+void
+o9fs_freefcall(struct o9fsfcall *fcall)
+{
+	void *p;
+
+	switch(fcall->type) {
+	case O9FS_RSTAT:
+		p = fcall->stat;
+		break;
+	case O9FS_RREAD:
+		p = fcall->data;
+		break;
+	case O9FS_RVERSION:
+		p = fcall->version;
+		break;
+	case O9FS_RERROR:
+		p = fcall->ename;
+		break;
+	default:
+		return;
+	}
+	
+	free(p, M_O9FS);
+	p = NULL;
+}
+
 
 /* XXX should match qid.path? */
 struct o9fsfid *
@@ -178,10 +113,12 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	int found, len;
 	char *name[O9FS_MAXWELEM];
 
+	printf("fid_lookup: path=%s\n", path);
 	/* since the name in stat doesn't have any
 	 * slashes, tokenize it
 	 */
 	o9fs_tokenize(name, nelem(name), path, '/');
+	printf("fid_lookup: name=%s\n", path);
 
 	found = 0;
 	len = strlen(*name);
@@ -195,7 +132,7 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	} */
 	
 	for (f = omnt->om_o9fs.rootfid; f && f->stat; f = f->next) {
-//		printf("fidlookup: %s\n", f->stat->name);
+		printf("fidlookup: %s\n", f->stat->name);
 		if (strlen(f->stat->name) == len &&
 			(memcmp(f->stat->name, *name, len)) == 0) {
 			found = 1;

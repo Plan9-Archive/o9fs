@@ -118,15 +118,33 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *vp;
 	struct proc *p;
-	
+	struct o9fsfid *f;
+	struct o9fsstat *stat;
+	struct o9fsmount *omnt;
+
 	p = curproc;
+	omnt = VFSTOO9FS(mp);
+	
+	f = o9fs_twalk(omnt, 0, "/");
+	if (f == 0)
+		return -1;
+	
+	stat = o9fs_fstat(omnt, f);
+	if (stat == NULL)
+		return -1;
+	
+	if ((o9fs_allocvp(mp, f, &vp, 0)) < 0)
+		return -1;
+
+	/* XXX hack */
+	vp->v_type = VDIR;
 
 	/*
 	 * Return locked reference to root.
 	 */
-	vp = VFSTOO9FS(mp)->om_root;
-	VREF(vp);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+//	vp = VFSTOO9FS(mp)->om_root;
+//	VREF(vp);
+//	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p); 
 	*vpp = vp;
 
 	return 0;

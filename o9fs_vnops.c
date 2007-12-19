@@ -19,6 +19,9 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
+void *xrealloc(void **, size_t, size_t);
+static void *o9fsrealloc(void *, size_t);
+
 int o9fs_open(void *);
 int o9fs_close(void *);
 int o9fs_lookup(void *);
@@ -113,21 +116,21 @@ o9fs_open(void *v)
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
 
-	printf("entering readlock\n");
+//	printf("entering readlock\n");
 	rw_enter_read(&f->rwl);
-	printf("[in realock]\n");
+//	printf("[in realock]\n");
 	if (f->opened == 1) {
 		printf("fid %d already opened\n", f->fid);
-		printf("exiting readlock\n");
+//		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
+
 		return 0;
 	} else {
-		printf("exiting readlock\n");
+//		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
 	}
-	printf("[out readlock\n");
+//	printf("[out readlock\n");
 
-	tx.tag = 0;
 	tx.type = O9FS_TOPEN;
 	tx.fid = f->fid;
 	tx.mode = mode;
@@ -136,15 +139,15 @@ o9fs_open(void *v)
 	if (error)
 		return -1;
 	
-	printf("entering writelock\n");
+//	printf("entering writelock\n");
 	rw_enter_write(&f->rwl);
-	printf("[in writelock]\n");
+//	printf("[in writelock]\n");
 	f->mode = mode;
 	f->opened = 1;
-	printf("exiting writelock\n");
+//	printf("exiting writelock\n");
 	rw_exit_write(&f->rwl);
-	printf("[out writelock]\n");
-
+//	printf("[out writelock]\n");
+	printf("<open\n");
 	return 0;
 }
 
@@ -157,6 +160,7 @@ o9fs_close(void *v)
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
 	
+	printf(">close\n");
 	ap = v;
 	vp = ap->a_vp;
 	f = VTO9(vp);
@@ -166,6 +170,7 @@ o9fs_close(void *v)
 
 	omnt = VFSTOO9FS(vp->v_mount);
 	o9fs_fidclunk(omnt, f);
+	printf("<close\n");
 
 	return 0;
 }
@@ -229,7 +234,6 @@ o9fs_create(void *v)
 	stat->uid = 0;
 	stat->gid = 0;
 
-	tx.tag = 0;
 	tx.type = O9FS_TCREATE;
 	tx.name = cnp->cn_nameptr;
 	tx.fid = f->fid;
@@ -317,13 +321,15 @@ o9fs_read(void *v)
 	n = o9fs_tread(omnt, f, buf, RWSIZE, offset);
 	if (n > 0)
 		error = uiomove(buf, n, uio);
-	else
-		o9fs_fidclunk(omnt, f);
+	else if (n < 0)
+		error = n;
+/*	else if (n < 0
+		o9fs_fidclunk(omnt, f); */
 
 	return error;
 }
 
-/* return an empty dirent */
+/*
 int
 o9fs_readdir(void *v)
 {	
@@ -333,9 +339,10 @@ o9fs_readdir(void *v)
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
 	struct o9fsstat *stat;
-	u_char buf[RWSIZE];
+	u_char *buf;
 	long n, ts;
 	int error, *eofflag;
+	size_t len;
 
 	printf(">readdir\n");
 
@@ -349,41 +356,116 @@ o9fs_readdir(void *v)
 
 	ts = uio->uio_offset;
 
+	len = omnt->om_o9fs.msize;
+	buf = (u_char *) malloc(omnt->om_o9fs.msize, M_O9FS, M_WAITOK | M_ZERO);
+
 	do {
 		int i;
-		n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1);
-		printf("read %d bytes\n", n);
+		
+		i = 1;
+		do {
+			buf = (u_char *)xrealloc((void *)&buf, len, i*len);
+			len *= i++;
+			printf("buf %p size %d\n", buf, len);
+			n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1);
+			ts += n;
+			printf("read %d bytes\n", n);
+		} while(n);
+		
+		printf("readdir: n=%d\n", n);
 		if (n < 0)
 			return ENOTDIR;
-		if (n == 0)
-			return 0;
+	*	if (n == 0)
+			return 0; *
 
-		ts += n;
-	
 		if (ts >= 0) {
 			ts = o9fs_dirpackage(buf, ts, &stat);
 			if (ts < 0)
 				printf("malformed directory contents\n");
+			else {
+
+				for (i = 0; i < ts; i++) {
+					struct dirent d;
+
+					d.d_fileno = (u_int32_t)stat[i].qid.path;
+					d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
+					d.d_namlen = strlen(stat[i].name);
+					strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
+					d.d_reclen = DIRENT_SIZE(&d);
+
+					error = uiomove(&d, d.d_reclen, uio);
+					printf("stat[%d]->name = %s\n", i, d.d_name);
+				} 
+			}
 		}
-
-		for (i = 0; i < ts; i++) {
-			struct dirent d;
-
-			d.d_fileno = (u_int32_t)stat[i].qid.path;
-			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-			d.d_namlen = strlen(stat[i].name);
-			strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
-			d.d_reclen = DIRENT_SIZE(&d);
-
-			error = uiomove(&d, d.d_reclen, uio);
-			printf("stat[%d]->name = %s\n", i, d.d_name);
-		}
-		
 		if (ts == 0 && n < 0)
 			return -1;
 	} while(n > 0);
 
 	return error;
+}*/
+
+
+int
+o9fs_readdir(void *v)
+{	
+	struct vop_readdir_args *ap;
+	struct vnode *vp;
+	struct uio *uio;
+	struct o9fsfid *f;
+	struct o9fsmount *omnt;
+	struct o9fsstat *stat;
+	struct o9fsmsg *m;
+	struct dirent d;
+	u_char *buf;
+	long n, ts;
+	int error, *eofflag, nstat, mstat;
+	size_t len;
+
+	printf(">readdir\n");
+
+	ap = v;
+	vp = ap->a_vp;
+	uio = ap->a_uio;
+	eofflag = ap->a_eofflag;
+	f = VTO9(vp);
+	omnt = VFSTOO9FS(vp->v_mount);
+	error = 0;
+
+	ts = uio->uio_offset;
+
+	len = omnt->om_o9fs.msize;
+	buf = (u_char *) malloc(omnt->om_o9fs.msize, M_O9FS, M_WAITOK | M_ZERO);
+
+	nstat = 0;
+	mstat = 16;
+	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat) * mstat, M_O9FS, M_WAITOK);
+	
+	while ((n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1)) > 0) {
+		m = o9fs_msg(buf, n, O9FS_MLOAD);
+		/* XXX why? */
+		while (m->m_cur < m->m_end) {
+			if (nstat == mstat) {
+				mstat <<= 1;
+				stat = o9fsrealloc(stat, sizeof(struct o9fsstat) * mstat);
+			}
+			o9fs_msgstat(m, &stat[nstat]);
+			d.d_fileno = (u_int32_t)stat[nstat].qid.path;
+			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
+			d.d_namlen = strlen(stat[nstat].name);
+			strlcpy(d.d_name, stat[nstat].name, d.d_namlen+1);
+			d.d_reclen = DIRENT_SIZE(&d);
+
+			error = uiomove(&d, d.d_reclen, uio);
+			printf("stat[%d]->name = %s\n", nstat, d.d_name);
+			o9fs_freestat(&stat[nstat]);
+			nstat++;
+		}
+	}
+	free(stat, M_O9FS);
+	free(buf, M_O9FS);
+
+	return 0;
 }
 
 int
@@ -408,7 +490,7 @@ o9fs_write(void *v)
 	f = VTO9(vp);
 	error = n = 0;
 
-	printf(">write\n");
+//	printf(">write\n");
 /*	if (uio->uio_offset < 0 || vp->v_type != VREG)
 		return EINVAL;*/
 
@@ -476,6 +558,7 @@ o9fs_lookup(void *v)
 	if (fid == NULL) {
 		/* fid was not found, walk to it */
 		fid = o9fs_twalk(omnt, dfid->fid, namep);
+		printf("after walk\n");
 		if (fid) {
 			if ((o9fs_fstat(omnt, fid)) == NULL) {
 				printf("cannot stat %s\n", namep);
@@ -585,13 +668,16 @@ o9fs_setattr(void *v)
 
         return 0;
 }
-/* from usbf_realloc *
-static void *
+/* from usbf_realloc */
+void *
 xrealloc(void **ptr, size_t oldsize, size_t newsize)
 {
 	void *p;
 
-	p = malloc(newsize, M_TEMP, M_WAITOK);
+	if (oldsize == newsize)
+		return *ptr;
+
+	p = malloc(newsize, M_O9FS, M_WAITOK | M_ZERO);
 
 	if (oldsize > 0) {
 		printf("real realloc\n");
@@ -599,7 +685,18 @@ xrealloc(void **ptr, size_t oldsize, size_t newsize)
 	}
 	*ptr = p;
 	return p;
-} */
+}
+
+static void *
+o9fsrealloc(void *ptr, size_t size)
+{
+	void *p;
+	
+	p = malloc(size, M_O9FS, M_WAITOK);
+	bcopy(ptr, p, sizeof(ptr));
+	ptr = p;
+	return p;
+}
 
 
 /* this should suffice for now */
