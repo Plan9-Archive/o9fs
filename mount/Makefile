@@ -6,6 +6,7 @@ MAN=	mount_o9fs.8
 
 MOUNT=	/usr/src/sbin/mount
 CFLAGS+= -I${MOUNT} -I/sys
+LDFLAGS+=-static
 .PATH:	${MOUNT}
 
 .include <bsd.prog.mk>

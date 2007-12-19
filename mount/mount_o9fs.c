@@ -27,7 +27,7 @@ __dead void
 usage(void)
 {
 	extern char *__progname;
-	fprintf(stderr, "usage: %s [-o options] server node\n", __progname);
+	fprintf(stderr, "usage: %s [-o options] server node port\n", __progname);
 	exit(1);
 }
 
@@ -54,7 +54,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 2)
+	if (argc != 3)
 		usage();
 
 	/*
@@ -70,7 +70,7 @@ main(int argc, char *argv[])
 	}
 
 	saddr.sin_family = PF_INET;
-	saddr.sin_port = htons(564);
+	saddr.sin_port = htons(atoi(argv[2]));
 
 	args.saddr = (struct sockaddr *) &saddr;
 	args.saddrlen = sizeof(saddr);
