@@ -113,12 +113,10 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	int found, len;
 	char *name[O9FS_MAXWELEM];
 
-	printf("fid_lookup: path=%s\n", path);
 	/* since the name in stat doesn't have any
 	 * slashes, tokenize it
 	 */
 	o9fs_tokenize(name, nelem(name), path, '/');
-	printf("fid_lookup: name=%s\n", path);
 
 	found = 0;
 	len = strlen(*name);
@@ -132,7 +130,6 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	} */
 	
 	for (f = omnt->om_o9fs.rootfid; f && f->stat; f = f->next) {
-		printf("fidlookup: %s\n", f->stat->name);
 		if (strlen(f->stat->name) == len &&
 			(memcmp(f->stat->name, *name, len)) == 0) {
 			found = 1;
@@ -261,55 +258,6 @@ o9fs_dumpchildlist(struct o9fsfid *fid)
 	printf("child list for %s\n", fid->stat->name);
 	TAILQ_FOREACH(f, &fid->child, fidlist)
 		printf("%d %s\n", f->fid, f->stat->name);
-}
-
-long
-o9fs_dirpackage(u_char *buf, long ts, struct o9fsstat **d)
-{
-	char *s;
-	long ss, i, n, nn, m;
- 
-	*d = NULL;
-	if (ts <= 0)
-		return 0;
- 
-	/*
-	 * first find number of all stats, check they look like stats, & size all associated strings
-	 */
-	ss = 0;
-	n = 0;
- 	for (i = 0; i < ts; i += m) {
- 		m = O9FS_BIT16SZ + O9FS_GBIT16(&buf[i]);
-		if ((o9fs_statcheck(&buf[i], m)) < 0)
-			break;
-		ss += m;
-		n++;
-	}
-
-	if (i != ts) {
-		printf("i != ts\n");
-		return -1;
- 	}
-
-	*d = malloc(n * sizeof(struct o9fsstat) + ss, M_O9FS, M_WAITOK);
-
-	/*
-	 * then convert all buffers
-	 */
-	s = (char *) *d + n * sizeof(struct o9fsstat);
-	nn = 0;
-	for (i = 0; i < ts; i += m) {
-		m = O9FS_BIT16SZ + O9FS_GBIT16((u_char *) &buf[i]);
-		if (nn >= n || o9fs_convM2D(&buf[i], m, *d + nn, s) != m) {
-			free(*d, M_O9FS);
-			*d = NULL;
-			return -1;
-		}
-		nn++;
-		s += m;
-	}
-
-	return nn;
 }
 
 int

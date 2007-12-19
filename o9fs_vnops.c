@@ -135,7 +135,7 @@ o9fs_open(void *v)
 	tx.fid = f->fid;
 	tx.mode = mode;
 	
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error)
 		return -1;
 	
@@ -243,7 +243,7 @@ o9fs_create(void *v)
 	else
 		tx.perm = o9fs_utopmode(vap->va_mode) & (~0666 | (f->stat->mode & 0666));
 
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error == -1)
 		goto out;
 
@@ -329,82 +329,6 @@ o9fs_read(void *v)
 	return error;
 }
 
-/*
-int
-o9fs_readdir(void *v)
-{	
-	struct vop_readdir_args *ap;
-	struct vnode *vp;
-	struct uio *uio;
-	struct o9fsfid *f;
-	struct o9fsmount *omnt;
-	struct o9fsstat *stat;
-	u_char *buf;
-	long n, ts;
-	int error, *eofflag;
-	size_t len;
-
-	printf(">readdir\n");
-
-	ap = v;
-	vp = ap->a_vp;
-	uio = ap->a_uio;
-	eofflag = ap->a_eofflag;
-	f = VTO9(vp);
-	omnt = VFSTOO9FS(vp->v_mount);
-	error = 0;
-
-	ts = uio->uio_offset;
-
-	len = omnt->om_o9fs.msize;
-	buf = (u_char *) malloc(omnt->om_o9fs.msize, M_O9FS, M_WAITOK | M_ZERO);
-
-	do {
-		int i;
-		
-		i = 1;
-		do {
-			buf = (u_char *)xrealloc((void *)&buf, len, i*len);
-			len *= i++;
-			printf("buf %p size %d\n", buf, len);
-			n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1);
-			ts += n;
-			printf("read %d bytes\n", n);
-		} while(n);
-		
-		printf("readdir: n=%d\n", n);
-		if (n < 0)
-			return ENOTDIR;
-	*	if (n == 0)
-			return 0; *
-
-		if (ts >= 0) {
-			ts = o9fs_dirpackage(buf, ts, &stat);
-			if (ts < 0)
-				printf("malformed directory contents\n");
-			else {
-
-				for (i = 0; i < ts; i++) {
-					struct dirent d;
-
-					d.d_fileno = (u_int32_t)stat[i].qid.path;
-					d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-					d.d_namlen = strlen(stat[i].name);
-					strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
-					d.d_reclen = DIRENT_SIZE(&d);
-
-					error = uiomove(&d, d.d_reclen, uio);
-					printf("stat[%d]->name = %s\n", i, d.d_name);
-				} 
-			}
-		}
-		if (ts == 0 && n < 0)
-			return -1;
-	} while(n > 0);
-
-	return error;
-}*/
-
 
 int
 o9fs_readdir(void *v)
@@ -443,14 +367,15 @@ o9fs_readdir(void *v)
 	
 	while ((n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1)) > 0) {
 		m = o9fs_msg(buf, n, O9FS_MLOAD);
-		/* XXX why? */
+		printf("cur=%p end=%p\n", m->m_cur, m->m_end);
 		while (m->m_cur < m->m_end) {
 			if (nstat == mstat) {
 				mstat <<= 1;
 				stat = o9fsrealloc(stat, sizeof(struct o9fsstat) * mstat);
 			}
+			printf("cur=%p end=%p\n", m->m_cur, m->m_end);
 			o9fs_msgstat(m, &stat[nstat]);
-			d.d_fileno = (u_int32_t)stat[nstat].qid.path;
+			d.d_fileno = (uint32_t)stat[nstat].qid.path;
 			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
 			d.d_namlen = strlen(stat[nstat].name);
 			strlcpy(d.d_name, stat[nstat].name, d.d_namlen+1);
@@ -461,6 +386,7 @@ o9fs_readdir(void *v)
 			o9fs_freestat(&stat[nstat]);
 			nstat++;
 		}
+		free(m, M_O9FS); // OOO
 	}
 	free(stat, M_O9FS);
 	free(buf, M_O9FS);
@@ -528,6 +454,7 @@ o9fs_lookup(void *v)
 	struct proc *p;
 	int flags, nameiop, error, islast;
 
+	printf(">lookup\n");
 	ap = v;
 	dvp = ap->a_dvp;			/* parent dir where to look */
 	vpp = ap->a_vpp;			/* resulting vnode */
@@ -601,7 +528,6 @@ bad:
 }	
 
 
-
 int
 o9fs_getattr(void *v)
 {
@@ -667,24 +593,6 @@ o9fs_setattr(void *v)
 		printf("<setattr\n");
 
         return 0;
-}
-/* from usbf_realloc */
-void *
-xrealloc(void **ptr, size_t oldsize, size_t newsize)
-{
-	void *p;
-
-	if (oldsize == newsize)
-		return *ptr;
-
-	p = malloc(newsize, M_O9FS, M_WAITOK | M_ZERO);
-
-	if (oldsize > 0) {
-		printf("real realloc\n");
-		bcopy(*ptr, p, oldsize);
-	}
-	*ptr = p;
-	return p;
 }
 
 static void *

@@ -96,7 +96,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
 	error = o9fs_tversion(omnt, 8192, O9FS_VERSION9P);
 	if (error)
 		return error;
-		
+	
 	fid = o9fs_tattach(omnt, 0, "iru", "");
 	if (fid == NULL)
 		return EIO;
@@ -126,27 +126,27 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	omnt = VFSTOO9FS(mp);
 	
 	f = o9fs_twalk(omnt, 0, "/");
-	if (f == 0)
+	if (f == NULL) {
+		printf("could not walk to root fid\n");
 		return -1;
-	
+	}
+
 	stat = o9fs_fstat(omnt, f);
-	if (stat == NULL)
+	if (stat == NULL) {
+		printf("could not stat root fid\n");
 		return -1;
+	}
 	
-	if ((o9fs_allocvp(mp, f, &vp, 0)) < 0)
+	/* return locked reference to root */
+	if ((o9fs_allocvp(mp, f, &vp, 0)) < 0) {
+		printf("could not alloc a vnode for root fid\n");
 		return -1;
+	}
 
 	/* XXX hack */
 	vp->v_type = VDIR;
 
-	/*
-	 * Return locked reference to root.
-	 */
-//	vp = VFSTOO9FS(mp)->om_root;
-//	VREF(vp);
-//	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p); 
-	*vpp = vp;
-
+	*vpp = vp;	
 	return 0;
 }
 
@@ -158,16 +158,19 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 {
 	struct o9fsmount *omnt;
 	struct vnode *vp;
+	struct o9fsfid *f;
 	int error, flags;
 	
 	flags = 0;
 	omnt = VFSTOO9FS(mp);
 
 	vp = omnt->om_root;
+	f = VTO9(vp);
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
+	o9fs_tclunk(omnt, f);
 	error = vflush(mp, NULL, flags);
 	if (error)
 		return (error);

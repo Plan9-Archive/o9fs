@@ -20,7 +20,7 @@ o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 	tx.version = version;
 	tx.msize = msize;
 
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error == -1)
 		return -1;
 
@@ -51,7 +51,7 @@ o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	tx.uname = user;
 	tx.aname = aname;
 
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error) {
 		o9fs_putfid(omnt, fid);
 		return NULL;
@@ -68,7 +68,7 @@ o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
 
 	tx.type = O9FS_TCLUNK;
 	tx.fid = f->fid;
-	o9fs_rpc(omnt, &tx, &rx, 0);
+	o9fs_rpc(omnt, &tx, &rx);
 	f->opened = 0;
 	f->mode = -1;
 	o9fs_putfid(omnt, f);
@@ -101,7 +101,7 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	tx.newfid = f->fid;
 	tx.nwname = n;
 		
-	if ((o9fs_rpc(omnt, &tx, &rx, 0)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
 		goto fail;
 	if (rx.nwqid < n)
 		goto fail;
@@ -127,7 +127,7 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 	tx.type = O9FS_TSTAT;
 	tx.fid = fid->fid;
 
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error)
 		return NULL;
 
@@ -162,7 +162,7 @@ o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
 	tx.fid = fid->fid;
 	tx.mode = mode;
 	
-	error = o9fs_rpc(omnt, &tx, &rx, 0);
+	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error)
 		return -1;
 	fid->mode = mode;
@@ -192,7 +192,7 @@ o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 		tx.offset = offset;
 	tx.count = n;
 
-	if ((o9fs_rpc(omnt, &tx, &rx, 0)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
 		return -1;
 	
 	if (rx.count) {
@@ -225,7 +225,7 @@ o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 	tx.count = n;
 	tx.data = buf;
 
-	if ((o9fs_rpc(omnt, &tx, &tx, 0)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &tx)) < 0)
 		return -1;
 	
 	if (offset == -1 && rx.count) {
