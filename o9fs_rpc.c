@@ -36,11 +36,11 @@ o9fs_recvmsg(struct o9fsmount *omnt, struct o9fsmsg *m)
 
 	m->m_cur = m->m_base;
 	o9fs_msgdword(m, &msize);
-//	printf("recvmsg: msize=%d\n", msize);
 
 	size = msize - 4;
 	if (o9fs_msgoverflow(m, size)) {
 		printf("recvmsg overflow\n");
+		panic("overflow\n");
 		return -1;
 	}
 
@@ -94,12 +94,17 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {
 	struct o9fsmsg *m;
 	int error;
+	void *data;
 
-	m = o9fs_msgalloc(8192);
+	data = malloc(8192, M_O9FS, M_WAITOK | M_ZERO);
+	m = o9fs_msg(data, 8192, 0);
 	
+	o9fs_debugfcall(tx);
 	error = o9fs_fcalltomsg(m, tx);
-	if (error == 0)
+	if (error == 0) {
+		printf("o9fs_rpc: fcalltomsg\n");
 		return -1;
+	}
 	
 //	printf("rpc: fid=%d\n", rx->fid);
 	/* what should I do with this return? */
@@ -107,13 +112,18 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	
 	bzero(m->m_base, m->m_size);
 	error = o9fs_recvmsg(omnt, m);
-	if (error == 0)
+	if (error == 0) {
+		printf("o9fs_rpc: recvmsg\n");
 		return -1;
+	}
 
 	error = o9fs_msgtofcall(m, rx);
-	if (error == 0)
+	if (error == 0) {
+		printf("o9fs_rpc: msgtofcall\n");
 		return -1;
+	}
 
+	o9fs_debugfcall(rx);
 	if (rx->type == O9FS_RERROR) {
 		printf("%s\n", rx->ename);
 		goto fail;
@@ -124,13 +134,11 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		goto fail;
 	} */
 
-	free(m->m_base, M_O9FS);
-	free(m, M_O9FS);
+	free(data, M_O9FS);
 	return 0;
 
 fail:
 	o9fs_freefcall(rx);
-	free(m->m_base, M_O9FS);
-	free(m, M_O9FS);
+	free(data, M_O9FS);
 	return -1;
 }
