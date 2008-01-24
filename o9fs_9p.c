@@ -29,6 +29,37 @@ o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
 }
 
 struct o9fsfid *
+o9fs_tauth(struct o9fsmount *omnt, char *user, char *aname)
+{
+	struct o9fsfcall tx, rx;
+	struct o9fsfid *afid;
+	struct o9fs *fs;
+	int error;
+
+	error = 0;
+	fs = &omnt->om_o9fs;
+	
+	if (aname == NULL)
+		aname = "";
+	
+	afid = o9fs_getfid(omnt);
+	
+	tx.type = O9FS_TAUTH;
+	tx.afid = afid ? afid->fid : O9FS_NOFID;
+	tx.uname = user;
+	tx.aname = aname;
+
+	error = o9fs_rpc(omnt, &tx, &rx);
+/*	if (error) {
+		o9fs_putfid(omnt, afid);
+		return NULL;
+	} */
+	afid->qid = rx.aqid;
+	
+	return afid;
+}
+
+struct o9fsfid *
 o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
 			char *user, char *aname)
 {
@@ -81,7 +112,7 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	struct o9fsfcall tx, rx;
 	struct o9fsfid *f;
 	int n;
-	char *name;
+	char *name; // *p;
 	
 	name = oname;
 /*	if (name) {
@@ -91,20 +122,36 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 		memcpy(temp, name, len);
 		temp[len] = '\0';
 		name = temp;
+	} */
+	
+	printf("walk: name to tokenize = %s\n", name);
+	n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
+/*	for(n=0; name && *name && n < 16; ){
+		p = name;  
+		name = strchr(name, '/');
+		if(name)
+			*name++ = 0;
+		if(*p == 0 || (*p == '.' && *(p+1) == 0))
+			continue;
+		tx.wname[n++] = p;  
 	}*/
-	
-	n = o9fs_tokenize(tx.wname, nelem(tx.wname), name, '/');
+
 	f = o9fs_getfid(omnt);
-	
+	printf("walk: tx.wname=%s\n", tx.wname[0]?tx.wname[0]:"null");
+
 	tx.type = O9FS_TWALK;
 	tx.fid = fid;
 	tx.newfid = f->fid;
 	tx.nwname = n;
 		
-	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &rx)) < 0) {
+		printf("walk: rpc failed\n");
 		goto fail;
-	if (rx.nwqid < n)
+	}
+	if (rx.nwqid < n) {
+		printf("walk: nwqid < n\n");
 		goto fail;
+	}
 	
 	f->qid = rx.wqid[n - 1];
 
@@ -112,7 +159,9 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	return f;
 
 fail:
-	o9fs_fidclunk(omnt, f);
+	printf("walk fail, gonna clunk\n");
+//	o9fs_fidclunk(omnt, f);
+	o9fs_putfid(omnt, f);
 	return NULL;
 }
 
