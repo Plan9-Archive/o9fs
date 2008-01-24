@@ -130,6 +130,7 @@ o9fs_fid_lookup(struct o9fsmount *omnt, struct o9fsfid *dir, char *path)
 	} */
 	
 	for (f = omnt->om_o9fs.rootfid; f && f->stat; f = f->next) {
+		printf("fid_lookup: name=%s\n", f->stat->name);
 		if (strlen(f->stat->name) == len &&
 			(memcmp(f->stat->name, *name, len)) == 0) {
 			found = 1;
@@ -148,6 +149,7 @@ o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
 	
 	i = 0;
 	s = str;
+
 	while (i < reslen && *s) {
 		while (*s == delim)
 			*(s++) = '\0';
