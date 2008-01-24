@@ -28,20 +28,6 @@ o9fs_msgoverflow(struct o9fsmsg *m, size_t size)
 	return m->m_cur + size > m->m_end;
 }
 
-struct o9fsmsg *
-o9fs_msgalloc(size_t size)
-{
-	struct o9fsmsg *m;
-	
-	m = (struct o9fsmsg *) malloc(sizeof(struct o9fsmsg), M_O9FS, M_WAITOK);
-	m->m_base = (u_char *) malloc(size, M_O9FS, M_WAITOK);
-	m->m_cur = m->m_base;
-	m->m_end = m->m_base + size;
-	m->m_size = m->m_end - m->m_base;
-
-	return m;
-}
-
 /* generic uint packing to a message buffer */
 void
 o9fs_msguint(struct o9fsmsg *m, size_t size, u_int *n)
@@ -49,8 +35,9 @@ o9fs_msguint(struct o9fsmsg *m, size_t size, u_int *n)
 	int v;
 
 	if(o9fs_msgoverflow(m, size)) {
-		printf("o9fs_msguint overflowed base=%p cur=%p end=%p size=%p\n",
-				m->m_base, m->m_cur, m->m_end, size);
+		printf("o9fs_msguint overflowed:\n"
+			"base=%p cur=%p end=%p size=%p\n",
+			m->m_base, m->m_cur, m->m_end, size);
 		return;
 	}
 
@@ -92,7 +79,7 @@ o9fs_msgbyte(struct o9fsmsg *m, u_char *n)
 
 	v = *n;
 	o9fs_msguint(m, O9FS_BYTE, &v);
-	*n = (u_char)v;
+	*n = (u_char)v;	
 }
 
 void
@@ -141,8 +128,8 @@ o9fs_msgstring(struct o9fsmsg *m, char **s)
 			(*s)[len] = '\0';
 		} else
 			memcpy(m->m_cur, *s, len);
+		m->m_cur += len;
 	}
-	m->m_cur += len;
 }
 
 void
@@ -187,9 +174,7 @@ o9fs_msgstrings(struct o9fsmsg *m, u_short *n, char *strings[])
 		} else
 			o9fs_msgdata(m, &strings[i], len);
 	}
-	free(s, M_O9FS); //XXX
 }
-	
 
 void
 o9fs_msgdata(struct o9fsmsg *m, char **data, size_t len)
