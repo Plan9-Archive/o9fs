@@ -22,6 +22,7 @@ int		o9fs_tcp_close(struct o9fsmount *);
 
 /* o9fs_9p.c */
 int		o9fs_tversion(struct o9fsmount *, int, char *);
+struct 	o9fsfid *o9fs_tauth(struct o9fsmount *, char *, char *);
 struct	o9fsfid *o9fs_tattach(struct o9fsmount *, struct o9fsfid *, char *, char *);
 struct	o9fsstat *o9fs_fstat(struct o9fsmount *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fsmount *, int, char *);
@@ -57,5 +58,7 @@ u_int	o9fs_recvmsg(struct o9fsmount *, struct o9fsmsg *);
 u_int	o9fs_sendmsg(struct o9fsmount *, struct o9fsmsg *);
 int		o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);	
 
+/* o9fs_debug.c */
+void	o9fs_debugfcall(struct o9fsfcall *);
 extern int (**o9fs_vnodeop_p)(void *);
 
