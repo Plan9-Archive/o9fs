@@ -12,7 +12,7 @@ struct o9fs {
 	int	nextfid;
 	struct	o9fsfid *rootfid;
 	struct	o9fsfid *freefid;
-	struct	rwlock rwl;
+//	struct	rwlock rwl;
 };
 
 struct o9fsmount;
@@ -135,23 +135,6 @@ struct o9fsfcall
 	u_char			*stat;				/* Twstat, Rstat */
 };
 
-
-#define	O9FS_GBIT8(p)	((p)[0])
-#define	O9FS_GBIT16(p)	((p)[0]|((p)[1]<<8))
-#define	O9FS_GBIT32(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)))
-#define	O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
-		((int64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
-
-#define	O9FS_PBIT8(p,v)	(p)[0]=(v)
-#define	O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8
-#define	O9FS_PBIT32(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24
-#define	O9FS_PBIT64(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24;\
-		(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
-
-#define	O9FS_BIT8SZ		1
-#define	O9FS_BIT16SZ	2
-#define	O9FS_BIT32SZ	4
-#define	O9FS_BIT64SZ	8
 #define	O9FS_QIDSZ		(O9FS_BIT8SZ+O9FS_BIT32SZ+O9FS_BIT64SZ)
 
 /* O9FS_STATFIXLEN includes leading 16-bit count */
