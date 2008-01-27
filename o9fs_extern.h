@@ -50,7 +50,7 @@ void	o9fs_msgstrings(struct o9fsmsg *, u_short *, char **);
 void	o9fs_msgdata(struct o9fsmsg *, char **, size_t);
 void	o9fs_msgqid(struct o9fsmsg *, struct o9fsqid *);
 void	o9fs_msgqids(struct o9fsmsg *, u_short *, struct o9fsqid *);
-void	o9fs_msgstat(struct o9fsmsg *, struct o9fsstat *);
+size_t	o9fs_msgstat(struct o9fsmsg *, struct o9fsstat *);
 size_t	o9fs_sizeof_stat(struct o9fsstat *);
 
 /* o9fs_rpc.c */

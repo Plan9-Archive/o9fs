@@ -227,7 +227,7 @@ o9fs_sizeof_stat(struct o9fsstat *stat)
 		O9FS_WORD + strlen(stat->muid));
 }
 
-void
+size_t
 o9fs_msgstat(struct o9fsmsg *m, struct o9fsstat *stat)
 {
 	u_short size;
@@ -247,4 +247,6 @@ o9fs_msgstat(struct o9fsmsg *m, struct o9fsstat *stat)
 	o9fs_msgstring(m, &stat->uid);
 	o9fs_msgstring(m, &stat->gid);
 	o9fs_msgstring(m, &stat->muid);
+
+	return m->m_cur - m->m_base;
 }
