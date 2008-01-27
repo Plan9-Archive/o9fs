@@ -110,7 +110,7 @@ o9fs_open(void *v)
 	struct o9fsfid *f;
 	struct o9fsfcall tx, rx;
 	int error, mode;
-	printf(">open\n");
+
 	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
@@ -118,20 +118,15 @@ o9fs_open(void *v)
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
 
-//	printf("entering readlock\n");
 	rw_enter_read(&f->rwl);
-//	printf("[in realock]\n");
 	if (f->opened == 1) {
 		printf("fid %d already opened\n", f->fid);
-//		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
 
 		return 0;
 	} else {
-//		printf("exiting readlock\n");
 		rw_exit_read(&f->rwl);
 	}
-//	printf("[out readlock\n");
 
 	tx.type = O9FS_TOPEN;
 	tx.fid = f->fid;
@@ -141,15 +136,11 @@ o9fs_open(void *v)
 	if (error)
 		return -1;
 	
-//	printf("entering writelock\n");
 	rw_enter_write(&f->rwl);
-//	printf("[in writelock]\n");
 	f->mode = mode;
 	f->opened = 1;
-//	printf("exiting writelock\n");
 	rw_exit_write(&f->rwl);
-//	printf("[out writelock]\n");
-	printf("<open\n");
+
 	return 0;
 }
 
@@ -162,7 +153,6 @@ o9fs_close(void *v)
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
 	
-	printf(">close\n");
 	ap = v;
 	vp = ap->a_vp;
 	f = VTO9(vp);
@@ -172,7 +162,6 @@ o9fs_close(void *v)
 
 	omnt = VFSTOO9FS(vp->v_mount);
 	o9fs_fidclunk(omnt, f);
-	printf("<close\n");
 
 	return 0;
 }
@@ -240,10 +229,7 @@ o9fs_create(void *v)
 	tx.name = cnp->cn_nameptr;
 	tx.fid = f->fid;
 	tx.mode = o9fs_uflags2omode(vap->va_mode);
-	if (isdir)
-		tx.perm = o9fs_utopmode(vap->va_mode) & (~0777 | (f->stat->mode & 0777));
-	else
-		tx.perm = o9fs_utopmode(vap->va_mode) & (~0666 | (f->stat->mode & 0666));
+	tx.perm = o9fs_utopmode(vap->va_mode);
 
 	error = o9fs_rpc(omnt, &tx, &rx);
 	if (error == -1)
@@ -263,7 +249,6 @@ o9fs_create(void *v)
 
 out:
 	vput(dvp);
-	
 	return error;
 }
 
@@ -339,7 +324,7 @@ o9fs_readdir(void *v)
 	struct uio *uio;
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
-	struct o9fsstat stat;
+	struct o9fsstat *stat;
 	struct o9fsmsg *m;
 	struct dirent d;
 	u_char *buf;
@@ -357,59 +342,33 @@ o9fs_readdir(void *v)
 	error = i = 0;
 
 	buf = malloc(8192, M_O9FS, M_WAITOK);
-/*	while ((n = o9fs_tread(omnt, f, buf, 8192, -1)) > 0) {
-		int nstat;
-		m = o9fs_msg(buf, n, O9FS_MLOAD);
-		nstat = n/sizeof(*stat);
-		printf("we have %d files\n", nstat);
-		stat = malloc(sizeof(*stat) * nstat, M_O9FS, M_WAITOK);
-		for (i = 0; i < nstat; i++) {
-			sz = o9fs_msgstat(m, &stat[i]);
-			if (sz == 0) {
-				o9fs_freestat(&stat[i]);
-				free(stat, M_O9FS);
-				free(m, M_O9FS);
-				free(buf, M_O9FS);
-				return -1;
-			}
-			d.d_fileno = (uint32_t)stat[i].qid.path;
-			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-			d.d_namlen = strlen(stat[i].name);
-			strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
-			d.d_reclen = DIRENT_SIZE(&d);
-
-			error = uiomove(&d, d.d_reclen, uio);
-			printf("stat[%d]->name=%s sz=%d\n", i, d.d_name, sz);
-			o9fs_freestat(&stat[i]);
-		}
-		free(m, M_O9FS);
-		free(stat, M_O9FS);
-	} */
+	stat = malloc(sizeof(*stat), M_O9FS, M_WAITOK);
 	
 	while ((n = o9fs_tread(omnt, f, buf, 8192, -1)) > 0) {
-		int nstat;
+		size_t sz;
 		i = 0;
 		while (i < n) {
 			m = o9fs_msg(buf + i, n - i, O9FS_MLOAD);
-			nstat = o9fs_msgstat(m, &stat);
-			if (nstat == 0)
+			sz = o9fs_msgstat(m, stat);
+			if (sz == 0)
 				return -1;
-			d.d_fileno = (uint32_t)stat.qid.path;
-			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-			d.d_namlen = strlen(stat.name);
-			strlcpy(d.d_name, stat.name, d.d_namlen+1);
-			d.d_reclen = DIRENT_SIZE(&d);
 
+			d.d_fileno = (uint32_t)stat->qid.path;
+			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
+			d.d_namlen = strlen(stat->name);
+			memcpy(d.d_name, stat->name, d.d_namlen); /* XXX null terminate? */
+			d.d_name[d.d_namlen] = '\0';
+			d.d_reclen = DIRENT_SIZE(&d);
 			error = uiomove(&d, d.d_reclen, uio);
-			printf("stat[%d]->name=%s nstat=%d\n", i, d.d_name, nstat);
-			o9fs_freestat(&stat);
-			i += nstat;
-			free(m, M_O9FS);
+			printf("%d name=%s\n", i, d.d_name);
+			if (error)
+				return -1;
+			i += sz;
 		}
-	//	free(m, M_O9FS);
-	//	free(stat, M_O9FS);
 	}
+	free(m, M_O9FS);
 	free(buf, M_O9FS);
+
 	return 0;
 }
 
