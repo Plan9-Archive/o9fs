@@ -40,7 +40,7 @@ o9fs_recvmsg(struct o9fsmount *omnt, struct o9fsmsg *m)
 	size = msize - 4;
 	if (o9fs_msgoverflow(m, size)) {
 		printf("recvmsg overflow\n");
-		panic("overflow\n");
+	//	panic("overflow\n");
 		return -1;
 	}
 
@@ -99,14 +99,13 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	data = malloc(8192, M_O9FS, M_WAITOK | M_ZERO);
 	m = o9fs_msg(data, 8192, 0);
 	
-	o9fs_debugfcall(tx);
+//	o9fs_debugfcall(tx);
 	error = o9fs_fcalltomsg(m, tx);
 	if (error == 0) {
 		printf("o9fs_rpc: fcalltomsg\n");
 		return -1;
 	}
 	
-//	printf("rpc: fid=%d\n", rx->fid);
 	/* what should I do with this return? */
 	o9fs_sendmsg(omnt, m);
 	
@@ -123,7 +122,7 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 		return -1;
 	}
 
-	o9fs_debugfcall(rx);
+//	o9fs_debugfcall(rx);
 	if (rx->type == O9FS_RERROR) {
 		printf("%s\n", rx->ename);
 		goto fail;
