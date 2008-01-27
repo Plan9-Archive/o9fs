@@ -1,5 +1,8 @@
 - o9fs_{read,write,readdir} should use malloc (or pools) for buffers
 - locking
+- add options to mount: noauth, auth as other user, port, aname
+- v9fs pass the fcall up to the functions instead of bcopying data (as in Tread) like us
+- do one walk per lookup, instead of one per name element
 
 known bugs:
 cannot unmount without forcing
