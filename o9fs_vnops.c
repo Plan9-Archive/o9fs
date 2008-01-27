@@ -19,8 +19,10 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
+#ifdef O9FS_REALLOC
 void *xrealloc(void **, size_t, size_t);
-static void *o9fsrealloc(void *, size_t);
+static void *o9fsrealloc(void *, size_t, size_t);
+#endif
 
 int o9fs_open(void *);
 int o9fs_close(void *);
@@ -329,7 +331,6 @@ o9fs_read(void *v)
 	return error;
 }
 
-
 int
 o9fs_readdir(void *v)
 {	
@@ -338,13 +339,12 @@ o9fs_readdir(void *v)
 	struct uio *uio;
 	struct o9fsfid *f;
 	struct o9fsmount *omnt;
-	struct o9fsstat *stat;
+	struct o9fsstat stat;
 	struct o9fsmsg *m;
 	struct dirent d;
 	u_char *buf;
-	long n, ts;
-	int error, *eofflag, nstat, mstat;
-	size_t len;
+	long n;
+	int error, *eofflag, i;
 
 	printf(">readdir\n");
 
@@ -354,43 +354,62 @@ o9fs_readdir(void *v)
 	eofflag = ap->a_eofflag;
 	f = VTO9(vp);
 	omnt = VFSTOO9FS(vp->v_mount);
-	error = 0;
+	error = i = 0;
 
-	ts = uio->uio_offset;
-
-	len = omnt->om_o9fs.msize;
-	buf = (u_char *) malloc(omnt->om_o9fs.msize, M_O9FS, M_WAITOK | M_ZERO);
-
-	nstat = 0;
-	mstat = 16;
-	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat) * mstat, M_O9FS, M_WAITOK);
-	
-	while ((n = o9fs_tread(omnt, f, buf, O9FS_DIRMAX, -1)) > 0) {
+	buf = malloc(8192, M_O9FS, M_WAITOK);
+/*	while ((n = o9fs_tread(omnt, f, buf, 8192, -1)) > 0) {
+		int nstat;
 		m = o9fs_msg(buf, n, O9FS_MLOAD);
-		printf("cur=%p end=%p\n", m->m_cur, m->m_end);
-		while (m->m_cur < m->m_end) {
-			if (nstat == mstat) {
-				mstat <<= 1;
-				stat = o9fsrealloc(stat, sizeof(struct o9fsstat) * mstat);
+		nstat = n/sizeof(*stat);
+		printf("we have %d files\n", nstat);
+		stat = malloc(sizeof(*stat) * nstat, M_O9FS, M_WAITOK);
+		for (i = 0; i < nstat; i++) {
+			sz = o9fs_msgstat(m, &stat[i]);
+			if (sz == 0) {
+				o9fs_freestat(&stat[i]);
+				free(stat, M_O9FS);
+				free(m, M_O9FS);
+				free(buf, M_O9FS);
+				return -1;
 			}
-			printf("cur=%p end=%p\n", m->m_cur, m->m_end);
-			o9fs_msgstat(m, &stat[nstat]);
-			d.d_fileno = (uint32_t)stat[nstat].qid.path;
+			d.d_fileno = (uint32_t)stat[i].qid.path;
 			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
-			d.d_namlen = strlen(stat[nstat].name);
-			strlcpy(d.d_name, stat[nstat].name, d.d_namlen+1);
+			d.d_namlen = strlen(stat[i].name);
+			strlcpy(d.d_name, stat[i].name, d.d_namlen+1);
 			d.d_reclen = DIRENT_SIZE(&d);
 
 			error = uiomove(&d, d.d_reclen, uio);
-			printf("stat[%d]->name = %s\n", nstat, d.d_name);
-			o9fs_freestat(&stat[nstat]);
-			nstat++;
+			printf("stat[%d]->name=%s sz=%d\n", i, d.d_name, sz);
+			o9fs_freestat(&stat[i]);
 		}
-		free(m, M_O9FS); // OOO
-	}
-	free(stat, M_O9FS);
-	free(buf, M_O9FS);
+		free(m, M_O9FS);
+		free(stat, M_O9FS);
+	} */
+	
+	while ((n = o9fs_tread(omnt, f, buf, 8192, -1)) > 0) {
+		int nstat;
+		i = 0;
+		while (i < n) {
+			m = o9fs_msg(buf + i, n - i, O9FS_MLOAD);
+			nstat = o9fs_msgstat(m, &stat);
+			if (nstat == 0)
+				return -1;
+			d.d_fileno = (uint32_t)stat.qid.path;
+			d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
+			d.d_namlen = strlen(stat.name);
+			strlcpy(d.d_name, stat.name, d.d_namlen+1);
+			d.d_reclen = DIRENT_SIZE(&d);
 
+			error = uiomove(&d, d.d_reclen, uio);
+			printf("stat[%d]->name=%s nstat=%d\n", i, d.d_name, nstat);
+			o9fs_freestat(&stat);
+			i += nstat;
+			free(m, M_O9FS);
+		}
+	//	free(m, M_O9FS);
+	//	free(stat, M_O9FS);
+	}
+	free(buf, M_O9FS);
 	return 0;
 }
 
@@ -446,7 +465,7 @@ o9fs_lookup(void *v)
 {
 	struct vop_lookup_args *ap;
 	struct componentname *cnp;
-	char *namep;
+	char namep[MAXPATHLEN], *path[O9FS_MAXWELEM];
 	struct vnode *dvp;
 	struct vnode **vpp;
 	struct o9fsfid *fid, *dfid;
@@ -454,12 +473,10 @@ o9fs_lookup(void *v)
 	struct proc *p;
 	int flags, nameiop, error, islast;
 
-	printf(">lookup\n");
 	ap = v;
 	dvp = ap->a_dvp;			/* parent dir where to look */
 	vpp = ap->a_vpp;			/* resulting vnode */
 	cnp = ap->a_cnp;
-	namep = cnp->cn_nameptr;	/* name to lookup */
 	flags = cnp->cn_flags;		/* lookup options */
 	p = curproc;
 	nameiop = cnp->cn_nameiop;	/* lookup operation */
@@ -469,6 +486,8 @@ o9fs_lookup(void *v)
 	dfid = VTO9(dvp);			/* parent dir fid */
 	omnt = VFSTOO9FS(dvp->v_mount);
 	
+	strlcpy(namep, cnp->cn_nameptr, MAXPATHLEN);
+	printf("LOOKUP: namep=%s\n", namep);
 	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred, p);
 	if (error)
 		return error;
@@ -480,40 +499,28 @@ o9fs_lookup(void *v)
 		return 0;
 	}
 
-	/* check if we have already looked up this */
-	fid = o9fs_fid_lookup(omnt, dfid, namep);
+	o9fs_tokenize(path, nelem(path), namep, '/');
+
+	fid = o9fs_twalk(omnt, dfid->fid, *path);
 	if (fid == NULL) {
-		/* fid was not found, walk to it */
-		fid = o9fs_twalk(omnt, dfid->fid, namep);
-		printf("after walk\n");
-		if (fid) {
-			if ((o9fs_fstat(omnt, fid)) == NULL) {
-				printf("cannot stat %s\n", namep);
-				goto bad;
-			}
-		} else { 
-			/* it is fine to fail walking when we are creating
-	 		 * or renaming on the last component of the path name
-	 		 */
-			if (islast && (nameiop == CREATE || nameiop == RENAME)) {
-				printf("lookup: creating\n");
-				/* save the name. it's gonna be used soon */
-				cnp->cn_flags |= SAVENAME;
-				error = EJUSTRETURN;
-				return error;
-				goto lockngo;
-			} else
-				/* it wasn't found at all */
-				goto bad;
-		}
+		/* it is fine to fail walking when we are creating
+	 	 * or renaming on the last component of the path name
+	 	 */
+		if (islast && (nameiop == CREATE || nameiop == RENAME)) {
+			printf("lookup: creating\n");
+			/* save the name. it's gonna be used soon */
+			cnp->cn_flags |= SAVENAME;
+			error = EJUSTRETURN;
+			return error;
+		} else
+			/* it wasn't found at all */
+			goto bad;
 	}
 
 	error = o9fs_allocvp(omnt->om_mp, fid, vpp, 0);
 	if (error)
 		goto bad;
 
-lockngo:
-	printf("lookup: lockngo\n");
 	/* fix locking on parent dir */
 	if (islast && !(cnp->cn_flags & LOCKPARENT)) {
 		VOP_UNLOCK(dvp, 0, p);
@@ -570,6 +577,8 @@ o9fs_getattr(void *v)
 	vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
 	vap->va_filerev = f->qid.vers;
 
+//	o9fs_freestat(stat);
+	free(stat, M_O9FS);
 	return 0;
 }
 
@@ -595,17 +604,18 @@ o9fs_setattr(void *v)
         return 0;
 }
 
+#ifdef O9FS_REALLOC
 static void *
-o9fsrealloc(void *ptr, size_t size)
+o9fsrealloc(void *ptr, size_t oldsize, size_t newsize)
 {
 	void *p;
 	
-	p = malloc(size, M_O9FS, M_WAITOK);
-	bcopy(ptr, p, sizeof(ptr));
+	p = malloc(newsize, M_O9FS, M_WAITOK);
+	bcopy(ptr, p, oldsize);
 	ptr = p;
 	return p;
 }
-
+#endif
 
 /* this should suffice for now */
 int
