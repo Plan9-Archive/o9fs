@@ -50,10 +50,10 @@ o9fs_tauth(struct o9fsmount *omnt, char *user, char *aname)
 	tx.aname = aname;
 
 	error = o9fs_rpc(omnt, &tx, &rx);
-/*	if (error) {
+	if (error) {
 		o9fs_putfid(omnt, afid);
 		return NULL;
-	} */
+	}
 	afid->qid = rx.aqid;
 	
 	return afid;
@@ -112,32 +112,12 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	struct o9fsfcall tx, rx;
 	struct o9fsfid *f;
 	int n;
-	char *name; // *p;
+	char *name;
 	
 	name = oname;
-/*	if (name) {
-		size_t len;
-		len = strlen(name);
-		temp =  malloc(len + 1, M_TEMP, M_WAITOK);
-		memcpy(temp, name, len);
-		temp[len] = '\0';
-		name = temp;
-	} */
-	
-	printf("walk: name to tokenize = %s\n", name);
 	n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
-/*	for(n=0; name && *name && n < 16; ){
-		p = name;  
-		name = strchr(name, '/');
-		if(name)
-			*name++ = 0;
-		if(*p == 0 || (*p == '.' && *(p+1) == 0))
-			continue;
-		tx.wname[n++] = p;  
-	}*/
 
 	f = o9fs_getfid(omnt);
-	printf("walk: tx.wname=%s\n", tx.wname[0]?tx.wname[0]:"null");
 
 	tx.type = O9FS_TWALK;
 	tx.fid = fid;
@@ -155,11 +135,8 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 	
 	f->qid = rx.wqid[n - 1];
 
-//	free(temp, M_TEMP);
 	return f;
-
 fail:
-	printf("walk fail, gonna clunk\n");
 //	o9fs_fidclunk(omnt, f);
 	o9fs_putfid(omnt, f);
 	return NULL;
@@ -194,10 +171,6 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 
 	/* is this the right place? */
 	fid->stat = stat;
-
-/*	printf("stat: name=%s uid=%s len=%ld qid.path=%ld\n", 
-			stat->name, stat->uid, stat->length, stat->qid.path); */
-
 	return stat;
 }
 
