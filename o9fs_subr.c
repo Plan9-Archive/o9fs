@@ -57,9 +57,10 @@ o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
 {
 		struct o9fs *fs;
         
+		if (f == NULL)
+			return;
 		fs = &omnt->om_o9fs;
-		if (f->stat)
-		//	free(f->stat, M_TEMP);
+		if (f->stat != NULL)
 			o9fs_freestat(f->stat);
 		f->stat = NULL;
 		if (f->vp)
