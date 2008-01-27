@@ -93,6 +93,7 @@ o9fs_debugfcall(struct o9fsfcall *fcall)
 	case O9FS_RAUTH:
 		printf("Rauth tag %u qid ", fcall->tag);
 		o9fs_debugqid(&fcall->qid);
+		printf("\n");
 		break;
 	case O9FS_TATTACH:
 		printf("Tattach tag %u fid %d afid %d uname %s aname %s\n",
@@ -131,18 +132,20 @@ o9fs_debugfcall(struct o9fsfcall *fcall)
 		printf("Rerror tag %u ename %s\n", fcall->tag, fcall->ename);
 		break;
 	case O9FS_TWALK:
-		printf("Twalk tag %u fid %d newfid %d nwname", 
+		printf("Twalk tag %u fid %d newfid %d nwname ", 
 			fcall->tag, fcall->fid, fcall->newfid, fcall->nwname);
 		for (i = 0; i < fcall->nwname; i++)
 			printf("%d: %s\n", i, fcall->wname[i]);
+		printf("\n");
 		break;
 	case O9FS_RWALK:
 		printf("Rwalk tag %u nwqid %d", fcall->tag, fcall->nwqid);
 		for (i = 0; i < fcall->nwqid; i++)
 			o9fs_debugqid(&fcall->wqid[i]);
+		printf("\n");
 		break;
 	case O9FS_TOPEN:
-		printf("Topen tag %u fid %d mode %d", fcall->tag, fcall->fid, fcall->mode);
+		printf("Topen tag %u fid %d mode %d\n", fcall->tag, fcall->fid, fcall->mode);
 		break;
 	case O9FS_ROPEN:
 		printf("Ropen tag %u", fcall->tag);
@@ -166,11 +169,13 @@ o9fs_debugfcall(struct o9fsfcall *fcall)
 	case O9FS_RREAD:
 		printf("Rread tag %u count %u data ", fcall->tag, fcall->count);
 		o9fs_debugdata(fcall->data, fcall->count);
+		printf("\n");
 		break;
 	case O9FS_TWRITE:
 		printf("Twrite tag %u fid %d offset %lld count %u data ",
 			fcall->tag, fcall->fid, fcall->offset, fcall->count);
 		o9fs_debugdata(fcall->data, fcall->count);
+		printf("\n");
 		break;
 	case O9FS_RWRITE:
 		printf("Rwrite tag %u fid %d\n", fcall->tag, fcall->fid);
