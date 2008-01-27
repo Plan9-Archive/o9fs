@@ -68,15 +68,15 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
 	if (error)
 		return (error);
 
-	rvp->v_flag |= VROOT;
-	rvp->v_type = VDIR;
-	
 	omnt->om_root = rvp;
 	omnt->om_mp = mp;
 	omnt->om_saddr = args->saddr;
 	omnt->om_saddrlen = args->saddrlen;
 	omnt->om_o9fs.nextfid = 0;
 	omnt->om_o9fs.freefid = NULL;
+
+	omnt->om_root->v_type = VDIR;
+	omnt->om_root->v_flag = VROOT;
 	
 	/* XXX net io must be transparent */
 	omnt->io = &io_tcp;
@@ -97,7 +97,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
 	if (error)
 		return error;
 	
-	fid = o9fs_tattach(omnt, o9fs_tauth(omnt, "iru", ""), "iru", "");
+	fid = o9fs_tattach(omnt, o9fs_tauth(omnt, "none", ""), "iru", "");
 	if (fid == NULL)
 		return EIO;
 
@@ -118,43 +118,39 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *vp;
 	struct proc *p;
-//	struct o9fsfid *f;
-//	struct o9fsstat *stat;
+	struct o9fsfid *f;
+	struct o9fsstat *stat;
 	struct o9fsmount *omnt;
-	printf(">o9fs_root\n");
+
 	p = curproc;
 	omnt = VFSTOO9FS(mp);
 
-/*
-	f = o9fs_twalk(omnt, 0, "/usr");
+	f = o9fs_twalk(omnt, 0, "/");
 	if (f == NULL) {
 		printf("could not walk to root fid\n");
 		return -1;
 	}
-	printf("root walk ok\n");
-
 	stat = o9fs_fstat(omnt, f);
 	if (stat == NULL) {
 		printf("could not stat root fid\n");
 		return -1;
 	}
-	printf("root stat ok\n");
 	
-	* return locked reference to root *
+	/* return locked reference to root */
 	if ((o9fs_allocvp(mp, f, &vp, 0)) < 0) {
 		printf("could not alloc a vnode for root fid\n");
 		return -1;
 	}
 
-	* XXX hack *
+	/* XXX hack */
 	vp->v_type = VDIR;
 
-	*vpp = vp; */
-	vp = VFSTOO9FS(mp)->om_root;
+	*vpp = vp;
+
+/*	vp = VFSTOO9FS(mp)->om_root;
 	vref(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-	*vpp = vp;
-	printf("<o9fs_root\n");
+	*vpp = vp; */
 	return 0;
 }
 
@@ -179,10 +175,12 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		flags |= FORCECLOSE;
 
 	o9fs_fidclunk(omnt, f);
-	error = vflush(mp, NULL, flags);
+	error = vflush(mp, vp, flags);
 	if (error)
 		return (error);
 
+	vrele(vp);
+	vgone(vp);
 	omnt->io->close(omnt);
 
 	free(omnt, M_MISCFSMNT);
