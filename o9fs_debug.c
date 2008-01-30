@@ -7,180 +7,212 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-static
-void
-o9fs_debugqid(struct o9fsqid *qid)
+int
+o9fs_debugqid(char *data, int len, struct o9fsqid *qid)
 {
-	printf("(%lld %d ", qid->path, qid->vers);
+	int n;
+	char b[6];
+
+	n = 0;
 	if (qid->type & O9FS_QTDIR)
-		printf("d");
+		b[n++] = 'd';	
 	if (qid->type & O9FS_QTAPPEND)
-		printf("a");
+		b[n++] = 'a';
 	if (qid->type & O9FS_QTEXCL)
-		printf("x");
+		b[n++] = 'x';
 	if (qid->type & O9FS_QTAUTH)
-		printf("A");
+		b[n++] = 'A';
 	if (qid->type & O9FS_QTTMP)
-		printf("t");
-	printf(")");
+		b[n++] = 't';
+	b[n] = '\0';
+	return snprintf(data, len, "(%.16llx %x %s)", (int64_t)qid->path, qid->vers, b);
 }
 
-static
-void
-o9fs_debugperm(int perm)
+int
+o9fs_debugperm(char *data, int len, int perm)
 {
+	int n;
+	char b[6];
+
+	n = 0;
 	if (perm & O9FS_DMDIR)
-		printf("d");
+		b[n++] = 'd';
 	if (perm & O9FS_DMAPPEND)
-		printf("a");
+		b[n++] = 'a';
 	if (perm & O9FS_DMAUTH)
-		printf("A");
+		b[n++] = 'A';
 	if (perm & O9FS_DMEXCL)
-		printf("l");
-	printf("%03o", perm&0777); /* XXX or 077 */
+		b[n++] = 'l';
+	if (n > 0)
+		b[n++] = '+';
+	b[n] = '\0';
+	return snprintf(data, len, "%s%03o", b, perm&0777); /* XXX or 077 */
 }
 
-static
-void
-o9fs_debugdata(char *data, int count)
+int
+o9fs_debugdata(char *buf, int len, uint8_t *data, int count)
 {
-	int i;
-	
-	i = 0;
-	while (i < count) {
-		printf("%02x", data[i]);
-		/* from v9fs */
-		if (i%4 == 3)
-			printf(" ");
-		if (i%32 == 31)
-			printf("\n");
-		i++;
+	int i, printable;
+	uint8_t *p;
+
+	printable = 1;
+	if (count > 8168)
+		count = 8168;
+
+	printf("debugdata: count=%d\n", count);
+	for (i = 0; i < count && printable; i++)
+		if((data[i] < 32 && data[i] != '\n' && data[i] != '\t') || data[i] > 127)
+			printable = 0;
+	p = buf;
+	if (printable) {
+		memcpy(p, data, count);
+		p += count;
+	} else {
+		for (i = 0; i < count; i++) {
+			if (i>0 && i%4 == 0)
+				*p++ = ' ';
+			if (i>0 && i%32 == 0)
+				*p++ = '\n';
+			snprintf(p, len, "%02x", data[i]);
+			p += 2;
+		}
 	}
-	printf("\n");
+	*p = '\0';
+	return p - data;
 }
 
-static
-void
-o9fs_debugstat(struct o9fsstat *stat)
+int
+o9fs_debugstat(char *data, int len, struct o9fsstat *stat)
 {
-	printf("'%s' '%s' '%s' '%s' q ", stat->name, stat->uid, stat->gid, stat->muid);
-	o9fs_debugqid(&stat->qid);
-	printf(" m ");
-	o9fs_debugperm(stat->mode);
-	printf(" at %d mt %d l %lld", stat->atime, stat->mtime, stat->length);
+	int n;
+
+	n = snprintf(data, len, "'%s' '%s' '%s' '%s' q ", 
+				stat->name, stat->uid, stat->gid, stat->muid);
+	n += o9fs_debugqid(data + n, len - n, &stat->qid);
+	n += snprintf(data + n, len - n, " m ");
+	n += o9fs_debugperm(data + n, len - n, stat->mode);
+	n += snprintf(data + n, len - n, " at %d mt %d l %lld", stat->atime, stat->mtime, stat->length);
+	return n;
 }
 
 void
 o9fs_debugfcall(struct o9fsfcall *fcall)
 {
-	int i;
+	int i, fid, type, tag, n, len;
 	struct o9fsmsg *m;
 	struct o9fsstat *stat;
+	char *buf, *tmp;
 
-	switch (fcall->type) {
+	buf = malloc(8192, M_O9FS, M_WAITOK);
+	len = 8192;
+	tmp = malloc(200, M_O9FS, M_WAITOK);
+	n = 0;
+	type = fcall->type;
+	fid = fcall->fid;
+	tag = fcall->tag;
+
+	if (type != O9FS_RREAD)
+		return;
+
+	switch (type) {
 	case O9FS_TVERSION:
-		printf("Tversion tag %u msize %u version '%s'\n",
+		snprintf(buf, len, "Tversion tag %u msize %u version '%s'\n",
 			fcall->tag, fcall->msize, fcall->version);
 		break;
 	case O9FS_RVERSION:
-		printf("Rversion tag %u msize %u version '%s'\n",
+		snprintf(buf, len, "Rversion tag %u msize %u version '%s'\n",
 			fcall->tag, fcall->msize, fcall->version);
 		break;
 	case O9FS_TAUTH:
-		printf("Tauth tag %u afid %d uname %s aname %s\n",
+		snprintf(buf, len, "Tauth tag %u afid %d uname %s aname %s\n",
 			fcall->tag, fcall->afid, fcall->uname, fcall->aname);
 		break;
 	case O9FS_RAUTH:
-		printf("Rauth tag %u qid ", fcall->tag);
-		o9fs_debugqid(&fcall->qid);
-		printf("\n");
+		n += snprintf(buf, len, "Rauth tag %u qid ", fcall->tag);
+		o9fs_debugqid(buf + n, len - n, &fcall->qid);
 		break;
 	case O9FS_TATTACH:
-		printf("Tattach tag %u fid %d afid %d uname %s aname %s\n",
+		snprintf(buf, len, "Tattach tag %u fid %d afid %d uname %s aname %s\n",
 			fcall->tag, fcall->fid, fcall->afid, fcall->uname, fcall->aname);
 		break;
 	case O9FS_RATTACH:
-		printf("Rattach tag %u qid ", fcall->tag);
-		o9fs_debugqid(&fcall->qid);
-		printf("\n");
+		n += snprintf(buf, len, "Rattach tag %u qid ", fcall->tag);
+		o9fs_debugqid(buf + n, len - n, &fcall->qid);
 		break;
 	case O9FS_TCLUNK:
-		printf("Tclunk tag %u fid %d\n", fcall->tag, fcall->fid);
+		snprintf(buf, len, "Tclunk tag %u fid %d\n", fcall->tag, fcall->fid);
 		break;
 	case O9FS_RCLUNK:
-		printf("Rclunk tag %u\n", fcall->tag);
+		snprintf(buf, len, "Rclunk tag %u\n", fcall->tag);
 		break;
 	case O9FS_TREMOVE:
-		printf("Tremove tag %u fid %u\n", fcall->tag, fcall->fid);
+		snprintf(buf, len, "Tremove tag %u fid %u\n", fcall->tag, fcall->fid);
 		break;
 	case O9FS_RREMOVE:
 		break;
 	case O9FS_TSTAT:
-		printf("Tstat tag %u fid %d\n", fcall->tag, fcall->fid);
+		snprintf(buf, len, "Tstat tag %u fid %d\n", fcall->tag, fcall->fid);
 		break;
 	case O9FS_RSTAT:
-		printf("Rstat tag %u ", fcall->tag);
+		n += snprintf(buf, len, "Rstat tag %u ", fcall->tag);
 		m = o9fs_msg(fcall->stat, fcall->nstat, O9FS_MLOAD);
 		stat = malloc(sizeof(struct o9fsstat) + fcall->nstat, 
-				M_O9FS, M_WAITOK | M_ZERO);
+				M_O9FS, M_WAITOK);
 		o9fs_msgstat(m, stat);
-		o9fs_debugstat(stat);
-		printf("\n");
+		o9fs_debugstat(buf + n, len - n, stat);
 		o9fs_freestat(stat);
 		break;
 	case O9FS_RERROR:
-		printf("Rerror tag %u ename %s\n", fcall->tag, fcall->ename);
+		snprintf(buf, len, "Rerror tag %u ename %s\n", fcall->tag, fcall->ename);
 		break;
 	case O9FS_TWALK:
-		printf("Twalk tag %u fid %d newfid %d nwname ", 
+		n += snprintf(buf, len, "Twalk tag %u fid %d newfid %d nwname ", 
 			fcall->tag, fcall->fid, fcall->newfid, fcall->nwname);
 		for (i = 0; i < fcall->nwname; i++)
-			printf("%d: %s\n", i, fcall->wname[i]);
-		printf("\n");
+			n += snprintf(buf + n, len - n, "%d: %s\n", i, fcall->wname[i]);
 		break;
 	case O9FS_RWALK:
-		printf("Rwalk tag %u nwqid %d", fcall->tag, fcall->nwqid);
+		n += snprintf(buf, len, "Rwalk tag %u nwqid %d", fcall->tag, fcall->nwqid);
 		for (i = 0; i < fcall->nwqid; i++)
-			o9fs_debugqid(&fcall->wqid[i]);
-		printf("\n");
+			n += o9fs_debugqid(buf + n, len - n, &fcall->wqid[i]);
 		break;
 	case O9FS_TOPEN:
-		printf("Topen tag %u fid %d mode %d\n", fcall->tag, fcall->fid, fcall->mode);
+		snprintf(buf, len, "Topen tag %u fid %d mode %d\n", fcall->tag, fcall->fid, fcall->mode);
 		break;
 	case O9FS_ROPEN:
-		printf("Ropen tag %u", fcall->tag);
-		o9fs_debugqid(&fcall->qid);
-		printf(" iounit %d\n", fcall->iounit);
+		n += snprintf(buf, len, "Ropen tag %u", fcall->tag);
+		n += o9fs_debugqid(buf + n, len - n, &fcall->qid);
+		snprintf(buf + n, len - n, " iounit %d\n", fcall->iounit);
 		break;
 	case O9FS_TCREATE:
-		printf("Tcreate tag %u fid %d name %s", fcall->tag, fcall->fid, fcall->name);
-		o9fs_debugperm(fcall->perm);
-		printf(" mode %d\n", fcall->mode);
+		n += snprintf(buf, len, "Tcreate tag %u fid %d name %s", fcall->tag, fcall->fid, fcall->name);
+		n += o9fs_debugperm(buf + n, len - n, fcall->perm);
+		snprintf(buf + n, len -n, " mode %d\n", fcall->mode);
 		break;
 	case O9FS_RCREATE:
-		printf("Rcreate tag %u", fcall->tag);
-		o9fs_debugqid(&fcall->qid);
-		printf(" iounit %d\n", fcall->iounit);
+		n += snprintf(buf, len, "Rcreate tag %u", fcall->tag);
+		n += o9fs_debugqid(buf + n, len - n, &fcall->qid);
+		snprintf(buf + n, len - n, " iounit %d\n", fcall->iounit);
 		break;
 	case O9FS_TREAD:
-		printf("Tread tag %u fid %d offset %ld count %d\n",
+		snprintf(buf, len, "Tread tag %u fid %d offset %ld count %d\n",
 			fcall->tag, fcall->fid, fcall->offset, fcall->count);
 		break;
 	case O9FS_RREAD:
-		printf("Rread tag %u count %u data ", fcall->tag, fcall->count);
-		o9fs_debugdata(fcall->data, fcall->count);
-		printf("\n");
+		n += snprintf(buf, len, "Rread tag %u count %u data\n", fcall->tag, fcall->count);
+		o9fs_debugdata(buf + n, len - n, fcall->data, fcall->count);
 		break;
 	case O9FS_TWRITE:
-		printf("Twrite tag %u fid %d offset %lld count %u data ",
+		n += snprintf(buf, len, "Twrite tag %u fid %d offset %lld count %u data ",
 			fcall->tag, fcall->fid, fcall->offset, fcall->count);
-		o9fs_debugdata(fcall->data, fcall->count);
-		printf("\n");
+		o9fs_debugdata(buf + n, len - n, fcall->data, fcall->count);
 		break;
 	case O9FS_RWRITE:
-		printf("Rwrite tag %u fid %d\n", fcall->tag, fcall->fid);
+		snprintf(buf, len, "Rwrite tag %u fid %d\n", fcall->tag, fcall->fid);
 		break;
 	default:
 		break;
 	}
+	printf("%s\n", buf);
 }
+
