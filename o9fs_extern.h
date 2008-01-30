@@ -59,6 +59,11 @@ u_int	o9fs_sendmsg(struct o9fsmount *, struct o9fsmsg *);
 int		o9fs_rpc(struct o9fsmount *, struct o9fsfcall *, struct o9fsfcall *);	
 
 /* o9fs_debug.c */
+int		o9fs_debugqid(char *, int, struct o9fsqid *qid);
+int		o9fs_debugperm(char *, int, int perm);
+int		o9fs_debugdata(char *, int, uint8_t *, int);
+int		o9fs_debugstat(char *, int, struct o9fsstat *stat);
 void	o9fs_debugfcall(struct o9fsfcall *);
+
 extern int (**o9fs_vnodeop_p)(void *);
 
