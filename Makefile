@@ -17,5 +17,7 @@ LKM=\
 	o9fs_vfsops\
 	o9fs_vnops
 
+COMBINED=o9fs.o
+
 .include <bsd.lkm.mk>
 
