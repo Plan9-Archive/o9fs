@@ -1,4 +1,3 @@
-- o9fs_{read,write,readdir} should use malloc (or pools) for buffers
 - locking
 - add options to mount: noauth, auth as other user, port, aname
 - v9fs pass the fcall up to the functions instead of bcopying data (as in Tread) like us
@@ -6,7 +5,7 @@
 
 known bugs:
 cannot unmount without forcing
-connect doesn't check if socket is connected to send data
-deadlock in VOP_OPEN when trying to acquire the readlock
+read/write crashes with len > 1024
 
-REGEN openbsd-headers.diff
+
+- use iovec + uio to describe buffers, as in the rest of the kernel

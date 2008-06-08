@@ -12,7 +12,7 @@
 extern struct vnodeopv_desc o9fs_vnodeop_opv_desc;
 extern struct vfsops o9fs_vfsops;
 
-struct vfsconf o9fs_vfsconf = { &o9fs_vfsops, MOUNT_O9FS, 0, 0, 0, NULL, NULL };
+struct vfsconf o9fs_vfsconf = { &o9fs_vfsops, MOUNT_O9FS, 0, 0, 0, NULL };
 MOD_VFS("o9fs", -1, &o9fs_vfsconf);
 
 int

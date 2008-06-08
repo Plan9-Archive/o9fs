@@ -7,120 +7,37 @@
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
 
-int
-o9fs_tversion(struct o9fsmount *omnt, int msize, char *version)
-{
-	struct o9fsfcall tx, rx;
-	int error;
-
-	error = 0;
-	
-	tx.tag = O9FS_NOTAG;
-	tx.type = O9FS_TVERSION;
-	tx.version = version;
-	tx.msize = msize;
-
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error == -1)
-		return -1;
-
-	omnt->om_o9fs.msize = rx.msize;
-	return 0;
-}
-
-struct o9fsfid *
-o9fs_tauth(struct o9fsmount *omnt, char *user, char *aname)
-{
-	struct o9fsfcall tx, rx;
-	struct o9fsfid *afid;
-	struct o9fs *fs;
-	int error;
-
-	error = 0;
-	fs = &omnt->om_o9fs;
-	
-	if (aname == NULL)
-		aname = "";
-	
-	afid = o9fs_getfid(omnt);
-	
-	tx.type = O9FS_TAUTH;
-	tx.afid = afid ? afid->fid : O9FS_NOFID;
-	tx.uname = user;
-	tx.aname = aname;
-
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error) {
-		o9fs_putfid(omnt, afid);
-		return NULL;
-	}
-	afid->qid = rx.aqid;
-	
-	return afid;
-}
-
-struct o9fsfid *
-o9fs_tattach(struct o9fsmount *omnt, struct o9fsfid *afid,
-			char *user, char *aname)
-{
-	struct o9fsfcall tx, rx;
-	struct o9fsfid *fid;
-	struct o9fs *fs;
-	int error;
-
-	error = 0;
-	fs = &omnt->om_o9fs;
-	
-	if (aname == NULL)
-		aname = "";
-	
-	fid = o9fs_getfid(omnt);
-	
-	tx.type = O9FS_TATTACH;
-	tx.afid = afid ? afid->fid : O9FS_NOFID;
-	tx.fid = fid->fid;
-	tx.uname = user;
-	tx.aname = aname;
-
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error) {
-		o9fs_putfid(omnt, fid);
-		return NULL;
-	}
-	fid->qid = rx.qid;
-	
-	return fid;
-}
-
 void
 o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
 {
 	struct o9fsfcall tx, rx;
 
+	DPRINT("fidclunk: enter\n");
 	tx.type = O9FS_TCLUNK;
 	tx.fid = f->fid;
 	o9fs_rpc(omnt, &tx, &rx);
+
 	f->opened = 0;
 	f->mode = -1;
 	o9fs_putfid(omnt, f);
+	DPRINT("fidclunk: return\n");
 }
 
 
 struct o9fsfid *
-o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
+o9fs_twalk(struct o9fsmount *omnt, int dirfid, char *oname)
 {
 	struct o9fsfcall tx, rx;
 	struct o9fsfid *f;
 	int n;
 	char *name;
-	
+
 	name = oname;
 	n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
-
 	f = o9fs_getfid(omnt);
 
 	tx.type = O9FS_TWALK;
-	tx.fid = fid;
+	tx.fid = dirfid;
 	tx.newfid = f->fid;
 	tx.nwname = n;
 		
@@ -132,14 +49,35 @@ o9fs_twalk(struct o9fsmount *omnt, int fid, char *oname)
 		printf("walk: nwqid < n\n");
 		goto fail;
 	}
-	
 	f->qid = rx.wqid[n - 1];
-
 	return f;
 fail:
-//	o9fs_fidclunk(omnt, f);
 	o9fs_putfid(omnt, f);
 	return NULL;
+}
+
+struct o9fsfid *
+o9fs_fclone(struct o9fsmount *omnt, struct o9fsfid *ofid)
+{
+	struct o9fsfid *cfid;
+
+	cfid = o9fs_twalk(omnt, ofid->fid, "");
+//	memcpy(&cfid->qid, &ofid->qid, sizeof(struct o9fsqid));
+//	cfid->fs = ofid->fs;
+//	cfid->vp = ofid->vp;
+//	cfid->vp->v_data = cfid;
+	return cfid;
+}
+
+struct o9fsfid *
+o9fs_funique(struct o9fsmount *omnt, struct o9fsfid *f)
+{
+	struct o9fsfid *nf;
+	
+	nf = o9fs_fclone(omnt, f);
+//	o9fs_fidclunk(omnt, f);
+//	f = nf;
+	return nf;
 }
 
 struct o9fsstat *
@@ -147,85 +85,55 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 {
 	struct o9fsstat *stat;
 	struct o9fsfcall tx, rx;
-	struct o9fsmsg *m;
 	int error;
 
 	tx.type = O9FS_TSTAT;
 	tx.fid = fid->fid;
-
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error)
+	if ((o9fs_rpc(omnt, &tx, &rx)) == -1)
 		return NULL;
 
-	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat) + rx.nstat,
-			M_O9FS, M_WAITOK);
+	stat = malloc(sizeof(struct o9fsstat) + rx.nstat,	M_O9FS, M_WAITOK);
+	if (!o9fs_convM2D(rx.stat, rx.nstat, stat, (char*)rx.stat))
+		return NULL;
 
-	m = o9fs_msg(rx.stat, rx.nstat, O9FS_MLOAD);
-
-	o9fs_msgstat(m, stat);
-	o9fs_freefcall(&rx);
-	if (m->m_cur > m->m_end) {
-		free(stat, M_O9FS);
-		stat = NULL;
-	}
-
-	/* is this the right place? */
-	fid->stat = stat;
 	return stat;
-}
-
-int
-o9fs_topen(struct o9fsmount *omnt, struct o9fsfid *fid, int mode)
-{
-	struct o9fsfcall tx, rx;
-	int error;
-
-	tx.type = O9FS_TOPEN;
-	tx.fid = fid->fid;
-	tx.mode = mode;
-	
-	error = o9fs_rpc(omnt, &tx, &rx);
-	if (error)
-		return -1;
-	fid->mode = mode;
-
-	return 0;
 }
 
 long
 o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
 			u_long n, int64_t offset)
 {
-	struct o9fsfcall tx, rx;
+	struct o9fsfcall *tx, *rx;
 	u_int msize;
 
-	msize = f->fs->msize - O9FS_IOHDRSZ;
+	msize = omnt->om_o9fs.msize - O9FS_IOHDRSZ;
 	if (n > msize)
 		n = msize;
-	
-	tx.type = O9FS_TREAD;
-	tx.fid = f->fid;
+
+	tx = &omnt->om_o9fs.request;
+	rx = &omnt->om_o9fs.reply;
+
+	tx->type = O9FS_TREAD;
+	tx->fid = f->fid;
 	
 	if (offset == -1) {
-		rw_enter_read(&f->rwl);
-		tx.offset = f->offset;
-		rw_exit_read(&f->rwl);
+		tx->offset = f->offset;
 	} else
-		tx.offset = offset;
-	tx.count = n;
+		tx->offset = offset;
+	tx->count = n;
 
-	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
+	if ((o9fs_rpc(omnt, tx, rx)) < 0)
 		return -1;
 	
-	if (rx.count) {
-		bcopy(rx.data, buf, rx.count);
+	if (rx->count) {
+		bcopy(rx->data, buf, rx->count);
 		if (offset == -1) {
-			rw_enter_write(&f->rwl);
-			f->offset += rx.count;
-			rw_exit_write(&f->rwl);
+			f->offset += rx->count;
 		}
+		return rx->count;
 	}
-	return rx.count;
+
+	return 0;
 }
 
 long
@@ -238,22 +146,18 @@ o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf,
 	tx.fid = f->fid;
 	
 	if (offset == -1) {
-		rw_enter_read(&f->rwl);
 		tx.offset = f->offset;
-		rw_exit_read(&f->rwl);
 	} else
 		tx.offset = offset;
 
 	tx.count = n;
 	tx.data = buf;
 
-	if ((o9fs_rpc(omnt, &tx, &tx)) < 0)
+	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
 		return -1;
 	
 	if (offset == -1 && rx.count) {
-		rw_enter_write(&f->rwl);
 		f->offset += rx.count;
-		rw_exit_write(&f->rwl);
 	}
 
 	return rx.count;

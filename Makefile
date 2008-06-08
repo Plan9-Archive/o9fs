@@ -7,16 +7,14 @@ kern:
 NOMAN=
 LKM=\
 	o9fs_9p\
-	o9fs_conv\
-	o9fs_debug\
-	o9fs_io\
+	o9fs_convS2M\
+	o9fs_convM2S\
+	o9fs_convM2D\
 	o9fs_lkm\
-	o9fs_msg\
 	o9fs_rpc\
 	o9fs_subr\
 	o9fs_vfsops\
 	o9fs_vnops
-
 COMBINED=o9fs.o
 
 .include <bsd.lkm.mk>

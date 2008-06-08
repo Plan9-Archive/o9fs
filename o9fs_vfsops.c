@@ -8,6 +8,8 @@
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
+#include <sys/filedesc.h>
+#include <sys/file.h>
 
 #include <miscfs/o9fs/o9fs.h>
 #include <miscfs/o9fs/o9fs_extern.h>
@@ -19,8 +21,82 @@ int o9fs_unmount(struct mount *, int, struct proc *);
 int o9fs_statfs(struct mount *, struct statfs *, struct proc *);
 int o9fs_start(struct mount *, int, struct proc *);
 int o9fs_root(struct mount *, struct vnode **);
-int	mounto9fs(struct o9fs_args *, struct mount *, char *, char *);
+int	mounto9fs(struct o9fs_args *, struct mount *, char *, char *, struct file *);
 
+static long
+o9fs_version(struct o9fsmount *omnt, char *version, int msize)
+{
+	struct o9fsfcall f, rx;
+	
+	f.type = O9FS_TVERSION;
+	f.tag = O9FS_NOTAG;
+	f.msize = msize;
+	f.version = version;
+
+	if ((o9fs_rpc(omnt, &f, &rx)) == -1)
+		return 0;
+
+	return omnt->om_o9fs.msize = rx.msize;
+}
+
+static struct o9fsfid *
+o9fs_auth(struct o9fsmount *omnt, char *user, char *aname)
+{
+	struct o9fsfcall tx, rx;
+	struct o9fsfid *afid;
+	int error;
+
+	if (aname == NULL)
+		aname = "";
+
+	tx.type = O9FS_TAUTH;
+	afid = o9fs_getfid(omnt);
+
+	tx.afid = afid ? afid->fid : O9FS_NOFID;
+	tx.uname = user;
+	tx.aname = aname;
+
+	error = o9fs_rpc(omnt, &tx, &rx);
+	if (error) {
+		o9fs_putfid(omnt, afid);
+		return NULL;
+	}
+	
+	afid->qid = rx.qid;
+	return afid;
+}
+
+struct o9fsfid *
+o9fs_attach(struct o9fsmount *omnt, struct o9fsfid *afid,
+			char *user, char *aname)
+{
+	struct o9fsfcall tx, rx;
+	struct o9fsfid *fid;
+	int error;
+
+	error = 0;
+	
+	if (aname == NULL)
+		aname = "";
+	
+	fid = o9fs_getfid(omnt);
+	
+	tx.type = O9FS_TATTACH;
+	tx.afid = afid ? afid->fid : O9FS_NOFID;
+	tx.fid = fid->fid;
+	tx.uname = user;
+	tx.aname = aname;
+
+	error = o9fs_rpc(omnt, &tx, &rx);
+	if (error) {
+		o9fs_putfid(omnt, fid);
+		return NULL;
+	}
+
+	fid->qid = rx.qid;
+	return fid;
+}
+	
 int
 o9fs_mount(struct mount *mp, const char *path, void *data, 
 		struct nameidata *ndp, struct proc *p)
@@ -29,6 +105,7 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 	char host[MNAMELEN], root[MNAMELEN];
 	int error;
 	size_t len;
+	struct file *fp;
 
 	if (mp->mnt_flag & MNT_UPDATE)
 		return EOPNOTSUPP;
@@ -47,21 +124,26 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 		return error;
 	bzero(&host[len], MNAMELEN - len);
 	
-	error = mounto9fs(&args, mp, root, host);
+	if ((fp = fd_getfile(p->p_fd, args.fd)) == NULL)
+		return EBADF;
+	fp->f_count++;
+	FREF(fp);
+
+	error = mounto9fs(&args, mp, root, host, fp);
 	return error;
 }
 
 int
-mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
+mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host, 
+	struct file *fp)
 {
 	struct o9fsmount *omnt;
 	struct vnode *rvp;
 	struct o9fsfid *fid;
-	struct o9fsstat *stat;
+	struct o9fsstat *stat; 
 	int error;
 
 	error = 0;
-
 	omnt = (struct o9fsmount *) malloc(sizeof(struct o9fsmount), M_MISCFSMNT, M_WAITOK);
 
 	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &rvp);
@@ -70,43 +152,29 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host)
 
 	omnt->om_root = rvp;
 	omnt->om_mp = mp;
-	omnt->om_saddr = args->saddr;
-	omnt->om_saddrlen = args->saddrlen;
+	omnt->om_fp = fp;
 	omnt->om_o9fs.nextfid = 0;
 	omnt->om_o9fs.freefid = NULL;
 
 	omnt->om_root->v_type = VDIR;
 	omnt->om_root->v_flag = VROOT;
 	
-	/* XXX net io must be transparent */
-	omnt->io = &io_tcp;
-
 	mp->mnt_data = (qaddr_t) omnt;
 	vfs_getnewfsid(mp);
 
 	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
 	bcopy(path, mp->mnt_stat.f_mntonname, MNAMELEN);
 
-	error = omnt->io->connect(omnt);
-	if (error) {
-		omnt->io->close(omnt);
-		return error;
-	}
+	omnt->om_o9fs.rpc = malloc(8192, M_O9FS, M_WAITOK);
+	if (!o9fs_version(omnt, O9FS_VERSION9P, 8192))
+		return EIO;
 
-	error = o9fs_tversion(omnt, 8192, O9FS_VERSION9P);
-	if (error)
-		return error;
-	
-	fid = o9fs_tattach(omnt, o9fs_tauth(omnt, "none", ""), "iru", "");
+	fid = o9fs_attach(omnt, o9fs_auth(omnt, "none", ""), "iru", "");
 	if (fid == NULL)
 		return EIO;
 
-	stat = o9fs_fstat(omnt, fid);
-	if (stat == NULL)
-		return EIO;
-
 	omnt->om_o9fs.rootfid = fid;
-	omnt->om_o9fs.rootfid->stat = stat;
+//	omnt->om_o9fs.rootfid->stat = stat;
 	omnt->om_root->v_data = fid;
 	error = o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
 
@@ -121,36 +189,25 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	struct o9fsfid *f;
 	struct o9fsstat *stat;
 	struct o9fsmount *omnt;
+	int error;
 
 	p = curproc;
 	omnt = VFSTOO9FS(mp);
 
-	f = o9fs_twalk(omnt, 0, "/");
-	if (f == NULL) {
-		printf("could not walk to root fid\n");
-		return -1;
-	}
-	stat = o9fs_fstat(omnt, f);
-	if (stat == NULL) {
-		printf("could not stat root fid\n");
-		return -1;
-	}
-	
-	/* return locked reference to root */
-	if ((o9fs_allocvp(mp, f, &vp, 0)) < 0) {
-		printf("could not alloc a vnode for root fid\n");
-		return -1;
-	}
-
-	/* XXX hack */
-	vp->v_type = VDIR;
-
-	*vpp = vp;
-
 /*	vp = VFSTOO9FS(mp)->om_root;
 	vref(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-	*vpp = vp; */
+	*vpp = vp;*/
+
+	f = o9fs_fclone(omnt, VTO9(omnt->om_root));
+	if (f == NULL)
+		return -1;
+//	f->stat = o9fs_fstat(omnt, f);
+	if(error = o9fs_allocvp(omnt->om_mp, f, &vp, VROOT))
+		return error;
+	vp->v_flag = VROOT;
+	vp->v_type = VDIR;
+	*vpp = vp; 
 	return 0;
 }
 
@@ -163,10 +220,12 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	struct o9fsmount *omnt;
 	struct vnode *vp;
 	struct o9fsfid *f;
+	struct file *fp;
 	int error, flags;
 	
 	flags = 0;
 	omnt = VFSTOO9FS(mp);
+	fp = omnt->om_fp;
 
 	vp = omnt->om_root;
 	f = VTO9(vp);
@@ -174,17 +233,18 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	o9fs_fidclunk(omnt, f);
 	error = vflush(mp, vp, flags);
 	if (error)
 		return (error);
 
-	vrele(vp);
-	vgone(vp);
-	omnt->io->close(omnt);
-
+	vput(vp);
+	o9fs_fidclunk(omnt, f);
+	o9fs_putfid(omnt, f);
+	fp->f_count--;
+	FRELE(fp);
+	free(omnt->om_o9fs.rpc, M_O9FS);
 	free(omnt, M_MISCFSMNT);
-	omnt = NULL;
+	omnt = mp->mnt_data = (qaddr_t)0;
 	
 	return 0;
 }

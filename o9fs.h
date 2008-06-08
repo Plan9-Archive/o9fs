@@ -1,58 +1,13 @@
-/* based on src/lib9pclient/fsimpl.h and include/fcall.h from p9p */
-
+#define DPRINT printf
 #define nelem(a) (sizeof(a) / sizeof(*a))
-#define RWSIZE 1024				/* size of rw transfers */
-
-/* 9p specific info */
-struct o9fs {
-	char	version[7];
-	int	msize;
-/*	int	ref;
-	int	fd; */
-	int	nextfid;
-	struct	o9fsfid *rootfid;
-	struct	o9fsfid *freefid;
-//	struct	rwlock rwl;
-};
 
 struct o9fsmount;
-
-struct o9fs_io {
-	int	(*connect) (struct o9fsmount *);
-	int	(*write) (struct o9fsmount *, struct uio *);
-	int	(*read) (struct o9fsmount *, struct uio *);
-	int	(*close) (struct o9fsmount *);
-};
-
-extern struct o9fs_io io_tcp;
-
-/* o9fs session */
-struct o9fsmount {
-	struct	mount *om_mp;		/* generic mount info */
-	struct	vnode *om_root;		/* local root of the tree */
-	struct	o9fs om_o9fs;		/* 9P info */
-
-	/* for use by transport routines */
-	struct	o9fs_io *io;		/* io routines */
-	struct	sockaddr *om_saddr;	/* server address */
-	size_t	om_saddrlen;		/* saddr size */
-	struct	socket *om_so;		/* socket to server */
-	sa_family_t	om_sotype;		/* socket type */
-};
-
-enum o9fs_msgmode {
-	O9FS_MLOAD,
-	O9FS_MSTORE
-};
-
-/* structure containing the raw stream of bytes for a 9P message */
-struct o9fsmsg {
-	u_char	*m_base;
-	u_char	*m_cur;
-	u_char	*m_end;
-	size_t	m_size;
-	enum o9fs_msgmode m_mode;
-};
+struct o9fs;
+struct o9fsmount;
+struct o9fsfid;
+struct o9fsqid;
+struct o9fsstat;
+struct o9fsfcall;
 
 struct o9fsqid {
 	uint64_t	path;
@@ -78,7 +33,6 @@ struct o9fsstat {
 
 
 /* 9p file */
-TAILQ_HEAD(o9fsdir, o9fsfid);
 struct o9fsfid {
 	int	fid;
 	int	mode;				/* open mode */
@@ -87,12 +41,10 @@ struct o9fsfid {
 	struct o9fsqid qid;
 	int64_t	offset;			/* rw offset */
 	struct	o9fs *fs;		/* our 9p session */
-	struct	vnode *vp;		/* backpointer to vnode */
-	struct	o9fsstat *stat;
-	struct	rwlock rwl;
+//	struct	vnode *vp;		/* backpointer to vnode */
+//	struct	o9fsstat *stat;
+//	struct	rwlock rwl;
 	struct	o9fsfid *next;
-	struct	o9fsdir child;	
-	TAILQ_ENTRY(o9fsfid) fidlist;
 };
 
 
@@ -135,7 +87,29 @@ struct o9fsfcall
 	u_char			*stat;				/* Twstat, Rstat */
 };
 
-#define	O9FS_QIDSZ		(O9FS_BIT8SZ+O9FS_BIT32SZ+O9FS_BIT64SZ)
+struct o9fs {
+	char	version[7];				/* version we are speaking */
+	int		msize;					/* max size of our payload */
+	
+	struct o9fsfcall	request;	/* request we are doing */
+	struct o9fsfcall	reply;		/* reply we received */
+	u_char	*rpc;
+	long	rpclen;
+
+/*	int	ref;
+	int	fd; */
+	int	nextfid;
+	struct	o9fsfid *rootfid;
+	struct	o9fsfid *freefid;
+};
+
+/* o9fs session */
+struct o9fsmount {
+	struct	mount *om_mp;		/* generic mount info */
+	struct	vnode *om_root;		/* local root of the tree */
+	struct	o9fs om_o9fs;		/* 9P info */
+	struct	file *om_fp;
+};
 
 /* O9FS_STATFIXLEN includes leading 16-bit count */
 /* The count, however, excludes itself; total size is O9FS_BIT16SZ+count */
@@ -145,10 +119,23 @@ struct o9fsfcall
 #define	O9FS_NOFID		(uint32_t)~0U	/* Dummy fid */
 #define	O9FS_IOHDRSZ	24				/* ample room for Twrite/Rread header (iounit) */
 
-#define O9FS_BYTE	1
-#define O9FS_WORD	2
-#define O9FS_DWORD	4
-#define O9FS_QWORD	8
+#define O9FS_GBIT8(p)	((p)[0])
+#define O9FS_GBIT16(p)	((p)[0]|((p)[1]<<8))
+#define O9FS_GBIT32(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)))
+#define O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
+						((uint64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
+ 
+#define O9FS_PBIT8(p,v)		(p)[0]=(v)
+#define O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8   
+#define O9FS_PBIT32(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24
+#define O9FS_PBIT64(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24;\
+							(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
+
+#define O9FS_BIT8SZ		1
+#define O9FS_BIT16SZ	2
+#define O9FS_BIT32SZ	4
+#define O9FS_BIT64SZ	8
+#define O9FS_QIDSZ      (O9FS_BIT8SZ+O9FS_BIT32SZ+O9FS_BIT64SZ)
 
 enum
 {
