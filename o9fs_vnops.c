@@ -117,7 +117,8 @@ o9fs_open(void *v)
 	omnt = VFSTOO9FS(vp->v_mount);
 
 	if (f->opened == 1) {
-		DPRINT("open: fid already opened\n");
+		DPRINT("open: already opened: fid->fid=%d vp=%p vp->v_data->fid=%d\n",
+			f->fid, vp, VTO9(vp)->fid);
 		DPRINT("open: return\n");
 		return 0;
 	}
@@ -167,7 +168,7 @@ o9fs_close(void *v)
 	DPRINT("close: fid=%d\n", f->fid);
 	omnt = VFSTOO9FS(vp->v_mount);
 	o9fs_fidclunk(omnt, f);
-	vp = NULL;
+	vp->v_data = NULL;
 	DPRINT("close: return\n");
 	return 0;
 }
@@ -522,8 +523,18 @@ o9fs_lookup(void *v)
 	
 	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
 		DPRINT("lookup: dot\n");
-		VREF(dvp);
-		*vpp = dvp;
+		if (dfid->opened == 1) {
+			DPRINT("lookup: dfid opened\n");
+			VREF(dvp);
+			*vpp = dvp; 
+			return 0;
+		}
+		dfid = o9fs_fclone(omnt, dfid);
+		if (dfid == NULL)
+			goto bad;
+		error = o9fs_allocvp(omnt->om_mp, dfid, vpp, 0);
+		if (error)
+			goto bad;
 		DPRINT("lookup: return\n");
 		return 0;
 	}
@@ -672,7 +683,6 @@ o9fs_reclaim(void *v)
 
 	cache_purge(vp);
 	DPRINT("reclaiming fid %d\n", VTO9(vp)->fid);
-	o9fs_fidclunk(VFSTOO9FS(vp->v_mount), VTO9(vp));
 	o9fs_freevp(vp);
 
 	DPRINT("reclaim: return\n");
