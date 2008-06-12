@@ -62,10 +62,10 @@ o9fs_fclone(struct o9fsmount *omnt, struct o9fsfid *ofid)
 	struct o9fsfid *cfid;
 
 	cfid = o9fs_twalk(omnt, ofid->fid, "");
-//	memcpy(&cfid->qid, &ofid->qid, sizeof(struct o9fsqid));
-//	cfid->fs = ofid->fs;
-//	cfid->vp = ofid->vp;
-//	cfid->vp->v_data = cfid;
+	cfid->opened = cfid->offset = 0;
+	cfid->mode = -1;
+	memcpy(&cfid->qid, &ofid->qid, sizeof(struct o9fsqid));
+	cfid->fs = ofid->fs;
 	return cfid;
 }
 
