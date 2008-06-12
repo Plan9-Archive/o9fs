@@ -33,8 +33,6 @@ o9fs_getfid(struct o9fsmount *omnt)
 						f[i].fid = fs->nextfid++;
 						f[i].next = &f[i+1];
 						f[i].fs = fs;
-				//		f[i].stat = NULL;
-				//		f[i].vp = NULL;
 						f[i].opened = 0;
                 }
 				f[i-1].next = NULL;
@@ -166,9 +164,6 @@ out:
 void
 o9fs_freevp(struct vnode *vp)
 {
-	struct o9fsfid *f;
-	
-	f = VTO9(vp);
 	vp->v_data = NULL;
 }
 
