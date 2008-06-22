@@ -16,6 +16,8 @@ LKM=\
 	o9fs_vfsops\
 	o9fs_vnops
 COMBINED=o9fs.o
+load:
+	modload -so o9fs $(COMBINED)
 
 .include <bsd.lkm.mk>
 
