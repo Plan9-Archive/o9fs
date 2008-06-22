@@ -1,0 +1,50 @@
+o9fs: A 9P capable virtual filesystem for OpenBSD
+
+Getting the source
+------------------
+For now, o9fs is only distributed in source form in a mercurial 
+repository living at http://src.oitobits.net/o9fs. Then, 
+
+hg clone http://src.oitobits.net/o9fs
+
+will download the source to a o9fs dir.
+
+Compiling
+---------
+Compiling o9fs consists of building the kernel module and the mount 
+program. Kernel sources are required [1].
+
+building module:
+cd /path/to/o9fs
+make
+
+building mount program:
+cd /path/to/o9fs/mount
+make
+
+Installing
+----------
+No installation possible, yet.
+
+Running
+-------
+Loading the kernel module requires a securelevel <= 0.
+
+cd /path/to/o9fs
+make load
+
+The mount program is mount_o9fs and should be used like
+
+mount_o9fs 'net!address!port' mountpoint
+
+for mounting a fileserver over the network (tcp), or
+
+mount_o9fs 'unix!path' mountpoint
+
+for mounting a fileserver served by a unix socket.
+
+---
+
+Comments, criticisms and suggestion are more than welcome.
+
+Iruata Souza - iru.muzgo at gmail.com - http://iru.oitobits.net
