@@ -24,7 +24,14 @@ make
 
 Installing
 ----------
-No installation possible, yet.
+Installating is done with
+
+sh /path/to/o9fs/install.sh
+
+which will tell you everything you should need.
+You should only remember: if you move o9fs to a different place from
+where it has been installed, you have to rerun the installation
+process.
 
 Running
 -------
