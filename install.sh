@@ -21,7 +21,7 @@ addfiles() {
 	[[ ! -z $exist ]] && return 
 
 	echo "# o9fs" >> $srcroot/sys/conf/files
-	echo "include $o9fsroot/files.o9fs" >> $srcroot/sys/conf/files
+	cat files.o9fs >> $srcroot/sys/conf/files
 }
 
 patch() {
