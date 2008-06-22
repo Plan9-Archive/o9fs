@@ -6,8 +6,8 @@
 #include <sys/exec.h>
 #include <sys/lkm.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 extern struct vnodeopv_desc o9fs_vnodeop_opv_desc;
 extern struct vfsops o9fs_vfsops;

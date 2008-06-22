@@ -11,8 +11,8 @@
 #include <sys/malloc.h>
 #include <sys/lock.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 enum {
 	fidchunk = 64

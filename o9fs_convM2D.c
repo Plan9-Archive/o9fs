@@ -1,8 +1,8 @@
 #include <sys/param.h>
 #include <sys/malloc.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 int
 o9fs_statcheck(u_char *buf, u_int nbuf)

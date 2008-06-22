@@ -11,8 +11,8 @@
 #include <sys/filedesc.h>
 #include <sys/file.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 #define o9fs_init ((int (*)(struct vfsconf *))nullop)
 

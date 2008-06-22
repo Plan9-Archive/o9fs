@@ -15,14 +15,14 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <miscfs/o9fs/o9fs.h>
+#include "o9fs.h"
 
-#include "mntopts.h"
+/*#include "mntopts.h"
 
 const struct mntopt opts[] = {
 	MOPT_STDOPTS,
 	{ NULL }
-};
+};*/
 
 __dead void
 usage(void)
@@ -138,14 +138,14 @@ main(int argc, char *argv[])
 
 	flags = 0;
 
-	while ((ch = getopt(argc, argv, "o:")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "o:")) != -1);
+	/*	switch (ch) {
 		case 'o':
 			getmntopts(optarg, opts, &flags);
 			break;
 		default:
 			usage();
-		}
+		}*/
 
 	argc -= optind;
 	argv += optind;

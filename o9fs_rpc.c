@@ -6,8 +6,8 @@
 #include <sys/filedesc.h>
 #include <sys/file.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 static long
 rdwr(struct o9fsmount *omnt, void *buf, long count, off_t *offset, int write)

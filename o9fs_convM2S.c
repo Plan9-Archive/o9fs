@@ -1,8 +1,8 @@
 #include <sys/param.h>
 #include <sys/malloc.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 u_char*
 gstring(u_char *p, u_char *ep, char **s)

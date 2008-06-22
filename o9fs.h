@@ -208,3 +208,12 @@ enum
 
 
 #define O9FS_DIRMAX		(sizeof(struct o9fsstat)+65535U)	/* max length of o9fsstat structure */
+
+/* hack */
+#define M_O9FS M_TEMP
+#define MOUNT_O9FS "o9fs"
+#define VT_O9FS VT_NON
+struct o9fs_args {
+	char *hostname;
+	int fd;
+};

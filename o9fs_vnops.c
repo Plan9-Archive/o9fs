@@ -16,8 +16,8 @@
 #include <sys/namei.h>
 #include <sys/syscallargs.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 static void *o9fsrealloc(void *, size_t, size_t);
 
@@ -314,7 +314,8 @@ o9fs_read(void *v)
 	msize = f->fs->msize - O9FS_IOHDRSZ;
 	if (len > msize)
 		len = msize;
-	offset = uio->uio_offset;
+	//offset = uio->uio_offset;
+	offset = -1;
 	buf = malloc(len, M_O9FS, M_WAITOK | M_ZERO);
 	n = o9fs_tread(omnt, f, buf, 1024, offset);
 	if (n > 0)

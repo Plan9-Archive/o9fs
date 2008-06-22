@@ -4,8 +4,8 @@
 #include <sys/vnode.h>
 #include <sys/namei.h>
 
-#include <miscfs/o9fs/o9fs.h>
-#include <miscfs/o9fs/o9fs_extern.h>
+#include "o9fs.h"
+#include "o9fs_extern.h"
 
 void
 o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
