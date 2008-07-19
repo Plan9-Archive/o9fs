@@ -1,3 +1,4 @@
+
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>
@@ -8,40 +9,46 @@
 #include "o9fs_extern.h"
 
 void
-o9fs_fidclunk(struct o9fsmount *omnt, struct o9fsfid *f)
+o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 {
 	struct o9fsfcall tx, rx;
 
 	DPRINT("fidclunk: enter\n");
 	tx.type = O9FS_TCLUNK;
 	tx.fid = f->fid;
-	o9fs_rpc(omnt, &tx, &rx);
+	o9fs_rpc(fs, &tx, &rx);
 
 	f->opened = 0;
 	f->mode = -1;
-	o9fs_putfid(omnt, f);
+	o9fs_putfid(fs, f);
 	DPRINT("fidclunk: return\n");
 }
 
 
 struct o9fsfid *
-o9fs_twalk(struct o9fsmount *omnt, int dirfid, char *oname)
+o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, char *oname)
 {
 	struct o9fsfcall tx, rx;
-	struct o9fsfid *f;
-	int n;
+	struct o9fsfid *nf;
+	int n, len;
 	char *name;
 
 	name = oname;
-	n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
-	f = o9fs_getfid(omnt);
-
+	if (name) {
+		n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
+		nf = o9fs_getfid(fs);
+	} else {
+		DPRINT("twalk: cloning name=%s fid=%d\n", name, f->fid);
+		nf = o9fs_fidclone(fs, f);
+		n = 0;
+	}
+	
 	tx.type = O9FS_TWALK;
-	tx.fid = dirfid;
-	tx.newfid = f->fid;
+	tx.fid = f->fid;
+	tx.newfid = nf->fid;
 	tx.nwname = n;
-		
-	if ((o9fs_rpc(omnt, &tx, &rx)) < 0) {
+
+	if ((o9fs_rpc(fs, &tx, &rx)) < 0) {
 		printf("walk: rpc failed\n");
 		goto fail;
 	}
@@ -49,47 +56,29 @@ o9fs_twalk(struct o9fsmount *omnt, int dirfid, char *oname)
 		printf("walk: nwqid < n\n");
 		goto fail;
 	}
-	f->qid = rx.wqid[n - 1];
-	return f;
+	
+	/* no negative numbers on the qid */
+	if (rx.nwqid > 0)
+		nf->qid = rx.wqid[n-1];
+/*	else
+		nf->qid = rx.wqid[0];*/
+
+	DPRINT("twalk: nf=%d -> qid.type = %d\n", nf->fid, nf->qid.type & O9FS_QTDIR);
+	return nf;
 fail:
-	o9fs_putfid(omnt, f);
+	o9fs_putfid(fs, nf);
 	return NULL;
 }
 
-struct o9fsfid *
-o9fs_fclone(struct o9fsmount *omnt, struct o9fsfid *ofid)
-{
-	struct o9fsfid *cfid;
-
-	cfid = o9fs_twalk(omnt, ofid->fid, "");
-	cfid->opened = cfid->offset = 0;
-	cfid->mode = -1;
-	memcpy(&cfid->qid, &ofid->qid, sizeof(struct o9fsqid));
-	cfid->fs = ofid->fs;
-	return cfid;
-}
-
-struct o9fsfid *
-o9fs_funique(struct o9fsmount *omnt, struct o9fsfid *f)
-{
-	struct o9fsfid *nf;
-	
-	nf = o9fs_fclone(omnt, f);
-//	o9fs_fidclunk(omnt, f);
-//	f = nf;
-	return nf;
-}
-
 struct o9fsstat *
-o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
+o9fs_fstat(struct o9fs *fs, struct o9fsfid *fid)
 {
 	struct o9fsstat *stat;
 	struct o9fsfcall tx, rx;
-	int error;
 
 	tx.type = O9FS_TSTAT;
 	tx.fid = fid->fid;
-	if ((o9fs_rpc(omnt, &tx, &rx)) == -1)
+	if ((o9fs_rpc(fs, &tx, &rx)) == -1)
 		return NULL;
 
 	stat = malloc(sizeof(struct o9fsstat) + rx.nstat,	M_O9FS, M_WAITOK);
@@ -100,65 +89,38 @@ o9fs_fstat(struct o9fsmount *omnt, struct o9fsfid *fid)
 }
 
 long
-o9fs_tread(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
-			u_long n, int64_t offset)
+o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf, 
+		u_long n, int64_t offset)
 {
-	struct o9fsfcall *tx, *rx;
-	u_int msize;
-
-	msize = omnt->om_o9fs.msize - O9FS_IOHDRSZ;
-	if (n > msize)
-		n = msize;
-
-	tx = &omnt->om_o9fs.request;
-	rx = &omnt->om_o9fs.reply;
-
-	tx->type = O9FS_TREAD;
-	tx->fid = f->fid;
+	char *uba;
+	u_long nr;
 	
-	if (offset == -1) {
-		tx->offset = f->offset;
-	} else
-		tx->offset = offset;
-	tx->count = n;
+	uba = buf;
+	fs->request.type = type;
+	fs->request.fid = f->fid;
 
-	if ((o9fs_rpc(omnt, tx, rx)) < 0)
+	if (offset == -1)
+		fs->request.offset= f->offset;
+	else
+		fs->request.offset = offset;
+
+	fs->request.data = uba;
+	nr = n;
+	if (nr > fs->msize-O9FS_IOHDRSZ)
+		nr = fs->msize-O9FS_IOHDRSZ;
+	fs->request.count = nr;
+
+	if ((o9fs_rpc(fs, &fs->request, &fs->reply)) < 0)
 		return -1;
-	
-	if (rx->count) {
-		bcopy(rx->data, buf, rx->count);
-		if (offset == -1) {
-			f->offset += rx->count;
-		}
-		return rx->count;
-	}
 
-	return 0;
-}
+	nr = fs->reply.count;
+	if (nr <= 0)
+		return nr;
 
-long
-o9fs_twrite(struct o9fsmount *omnt, struct o9fsfid *f, void *buf, 
-			long n, int64_t offset)
-{
-	struct o9fsfcall tx, rx;
+	if (type == O9FS_TREAD)
+		memcpy((u_char *)uba, fs->reply.data, nr);
 
-	tx.type = O9FS_TWRITE;
-	tx.fid = f->fid;
-	
-	if (offset == -1) {
-		tx.offset = f->offset;
-	} else
-		tx.offset = offset;
-
-	tx.count = n;
-	tx.data = buf;
-
-	if ((o9fs_rpc(omnt, &tx, &rx)) < 0)
-		return -1;
-	
-	if (offset == -1 && rx.count) {
-		f->offset += rx.count;
-	}
-
-	return rx.count;
+	if (offset == -1)
+		f->offset += fs->reply.count;
+	return nr;
 }

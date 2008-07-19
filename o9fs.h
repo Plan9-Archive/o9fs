@@ -1,14 +1,6 @@
 #define DPRINT printf
 #define nelem(a) (sizeof(a) / sizeof(*a))
 
-struct o9fsmount;
-struct o9fs;
-struct o9fsmount;
-struct o9fsfid;
-struct o9fsqid;
-struct o9fsstat;
-struct o9fsfcall;
-
 struct o9fsqid {
 	uint64_t	path;
 	uint32_t	vers;
@@ -31,25 +23,25 @@ struct o9fsstat {
 	char	*muid;			/* last modifier name */
 };
 
-
 /* 9p file */
 struct o9fsfid {
 	int	fid;
 	int	mode;				/* open mode */
 	int	opened;
-	int ref;				/* reference count */
+//	int ref;				/* reference count */
 	struct o9fsqid qid;
-	int64_t	offset;			/* rw offset */
-	struct	o9fs *fs;		/* our 9p session */
-//	struct	vnode *vp;		/* backpointer to vnode */
-//	struct	o9fsstat *stat;
-//	struct	rwlock rwl;
+	int64_t	offset;	
+//	struct	o9fs *fs;		/* our 9p session */
 	struct	o9fsfid *next;
+
+	/* really? */
+	char		*name;
+	u_int	namelen;
 };
 
 
 #define VTO9(vp) ((struct o9fsfid *)(vp)->v_data)
-#define VFSTOO9FS(mp) ((struct o9fsmount *)((mp)->mnt_data))
+#define VFSTOO9FS(mp) ((struct o9fs *)((mp)->mnt_data))
 
 #define	O9FS_VERSION9P	"9P2000"
 #define	O9FS_MAXWELEM	16
@@ -88,7 +80,11 @@ struct o9fsfcall
 };
 
 struct o9fs {
-	char	version[7];				/* version we are speaking */
+	/* mount info */
+	struct	mount *mp;		/* generic mount info */
+	struct	vnode *vroot;		/* local root of the tree */
+	struct	file *servfp;
+	char		version[7];				/* version we are speaking */
 	int		msize;					/* max size of our payload */
 	
 	struct o9fsfcall	request;	/* request we are doing */
@@ -104,12 +100,12 @@ struct o9fs {
 };
 
 /* o9fs session */
-struct o9fsmount {
+/*struct o9fsmount {
 	struct	mount *om_mp;		/* generic mount info */
 	struct	vnode *om_root;		/* local root of the tree */
 	struct	o9fs om_o9fs;		/* 9P info */
 	struct	file *om_fp;
-};
+
 
 /* O9FS_STATFIXLEN includes leading 16-bit count */
 /* The count, however, excludes itself; total size is O9FS_BIT16SZ+count */

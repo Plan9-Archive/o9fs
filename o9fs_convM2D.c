@@ -1,4 +1,5 @@
 #include <sys/param.h>
+#include <sys/systm.h>
 #include <sys/malloc.h>
 
 #include "o9fs.h"

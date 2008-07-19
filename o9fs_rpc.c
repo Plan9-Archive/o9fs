@@ -10,7 +10,7 @@
 #include "o9fs_extern.h"
 
 static long
-rdwr(struct o9fsmount *omnt, void *buf, long count, off_t *offset, int write)
+rdwr(struct o9fs *fs, void *buf, long count, off_t *offset, int write)
 {
 	struct file *fp;
 	struct uio auio;
@@ -19,7 +19,7 @@ rdwr(struct o9fsmount *omnt, void *buf, long count, off_t *offset, int write)
 	int error;
 
 	error = 0;
-	fp = omnt->om_fp;
+	fp = fs->servfp;
 	aiov.iov_base = buf;
 	cnt = aiov.iov_len = auio.uio_resid = count;
 	auio.uio_iov = &aiov;
@@ -47,39 +47,34 @@ rdwr(struct o9fsmount *omnt, void *buf, long count, off_t *offset, int write)
 }
 
 int
-o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
+o9fs_rpc(struct o9fs *fs, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {
 	int n, nn, error;
-	u_char buf[4], *tpkt;
-	struct uio auio;
-	struct iovec aiov;
+	u_char buf[4];
 	struct proc *p;
-	struct o9fs *fs;
 	struct file *fp;
 	
 	p = curproc;
 	error = 0;
-	fs = &omnt->om_o9fs;
-	fp = omnt->om_fp;
+	fp = fs->servfp;
 
 	/* calculate the size and allocate a new fcall */
 	n = o9fs_sizeS2M(tx);
-	tpkt = malloc(n, M_O9FS, M_WAITOK);
-	
-	nn = o9fs_convS2M(tx, tpkt, n);
+	nn = o9fs_convS2M(tx, fs->rpc, n);
 	if (nn != n) {
-		free(tpkt, M_O9FS);
 		printf("size mismatch\n");
 		return EIO;
 	}
 
-	n = rdwr(omnt, tpkt, nn, &fp->f_offset, 1);
+	n = rdwr(fs, fs->rpc, nn, &fp->f_offset, 1);
 	if (n < 0)
 		return -1;
 	if (n == 0)
 		return 0;
 
-	n = rdwr(omnt, buf, O9FS_BIT32SZ, &fp->f_offset, 0);
+	o9fs_freefcall(tx);
+//	bzero(fs->rpc, 8192); /* xxx */
+	n = rdwr(fs, buf, O9FS_BIT32SZ, &fp->f_offset, 0);
 	if (n < 0)
 		return -1;
 	if (n == 0)
@@ -94,14 +89,12 @@ o9fs_rpc(struct o9fsmount *omnt, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	/* read the rest of the msg */
 	O9FS_PBIT32(fs->rpc, n);
 
-	n = rdwr(omnt, fs->rpc + O9FS_BIT32SZ, n - O9FS_BIT32SZ, &fp->f_offset, 0);
+	n = rdwr(fs, fs->rpc + O9FS_BIT32SZ, n - O9FS_BIT32SZ, &fp->f_offset, 0);
 	if (n < 0)
 		return -1;
 	if (n == 0)
 		return 0;
 	
-	free(tpkt, M_O9FS);
-
 	n = O9FS_GBIT32((u_char *) fs->rpc);
 	nn = o9fs_convM2S(fs->rpc, n, rx);
 	if (nn != n) {

@@ -22,9 +22,10 @@ int o9fs_statfs(struct mount *, struct statfs *, struct proc *);
 int o9fs_start(struct mount *, int, struct proc *);
 int o9fs_root(struct mount *, struct vnode **);
 int	mounto9fs(struct o9fs_args *, struct mount *, char *, char *, struct file *);
+struct o9fsfid *o9fs_attach(struct o9fs *, struct o9fsfid *, char *, char *);
 
 static long
-o9fs_version(struct o9fsmount *omnt, char *version, int msize)
+o9fs_version(struct o9fs *fs, char *version, int msize)
 {
 	struct o9fsfcall f, rx;
 	
@@ -33,14 +34,14 @@ o9fs_version(struct o9fsmount *omnt, char *version, int msize)
 	f.msize = msize;
 	f.version = version;
 
-	if ((o9fs_rpc(omnt, &f, &rx)) == -1)
+	if ((o9fs_rpc(fs, &f, &rx)) == -1)
 		return 0;
 
-	return omnt->om_o9fs.msize = rx.msize;
+	return fs->msize = rx.msize;
 }
 
 static struct o9fsfid *
-o9fs_auth(struct o9fsmount *omnt, char *user, char *aname)
+o9fs_auth(struct o9fs *fs, char *user, char *aname)
 {
 	struct o9fsfcall tx, rx;
 	struct o9fsfid *afid;
@@ -50,15 +51,15 @@ o9fs_auth(struct o9fsmount *omnt, char *user, char *aname)
 		aname = "";
 
 	tx.type = O9FS_TAUTH;
-	afid = o9fs_getfid(omnt);
+	afid = o9fs_getfid(fs);
 
 	tx.afid = afid ? afid->fid : O9FS_NOFID;
 	tx.uname = user;
 	tx.aname = aname;
 
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(fs, &tx, &rx);
 	if (error) {
-		o9fs_putfid(omnt, afid);
+		o9fs_putfid(fs, afid);
 		return NULL;
 	}
 	
@@ -67,7 +68,7 @@ o9fs_auth(struct o9fsmount *omnt, char *user, char *aname)
 }
 
 struct o9fsfid *
-o9fs_attach(struct o9fsmount *omnt, struct o9fsfid *afid,
+o9fs_attach(struct o9fs *fs, struct o9fsfid *afid,
 			char *user, char *aname)
 {
 	struct o9fsfcall tx, rx;
@@ -79,7 +80,7 @@ o9fs_attach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	if (aname == NULL)
 		aname = "";
 	
-	fid = o9fs_getfid(omnt);
+	fid = o9fs_getfid(fs);
 	
 	tx.type = O9FS_TATTACH;
 	tx.afid = afid ? afid->fid : O9FS_NOFID;
@@ -87,9 +88,9 @@ o9fs_attach(struct o9fsmount *omnt, struct o9fsfid *afid,
 	tx.uname = user;
 	tx.aname = aname;
 
-	error = o9fs_rpc(omnt, &tx, &rx);
+	error = o9fs_rpc(fs, &tx, &rx);
 	if (error) {
-		o9fs_putfid(omnt, fid);
+		o9fs_putfid(fs, fid);
 		return NULL;
 	}
 
@@ -137,46 +138,43 @@ int
 mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host, 
 	struct file *fp)
 {
-	struct o9fsmount *omnt;
+	struct o9fs *fs;
 	struct vnode *rvp;
 	struct o9fsfid *fid;
-	struct o9fsstat *stat; 
 	int error;
 
 	error = 0;
-	omnt = (struct o9fsmount *) malloc(sizeof(struct o9fsmount), M_MISCFSMNT, M_WAITOK);
+	fs = (struct o9fs *) malloc(sizeof(struct o9fs), M_MISCFSMNT, M_WAITOK);
 
 	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &rvp);
 	if (error)
 		return (error);
 
-	omnt->om_root = rvp;
-	omnt->om_mp = mp;
-	omnt->om_fp = fp;
-	omnt->om_o9fs.nextfid = 0;
-	omnt->om_o9fs.freefid = NULL;
+	rvp->v_type = VDIR;
+	rvp->v_flag = VROOT;
+	fs->vroot = rvp;
+	fs->mp = mp;
+	fs->servfp = fp;
+	fs->nextfid = 0;
+	fs->freefid = NULL;
 
-	omnt->om_root->v_type = VDIR;
-	omnt->om_root->v_flag = VROOT;
-	
-	mp->mnt_data = (qaddr_t) omnt;
+	mp->mnt_data = (qaddr_t) fs;
 	vfs_getnewfsid(mp);
 
 	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
 	bcopy(path, mp->mnt_stat.f_mntonname, MNAMELEN);
 
-	omnt->om_o9fs.rpc = malloc(8192, M_O9FS, M_WAITOK);
-	if (!o9fs_version(omnt, O9FS_VERSION9P, 8192))
+	fs->rpc = malloc(8192+O9FS_IOHDRSZ, M_O9FS, M_WAITOK);
+	if (!o9fs_version(fs, O9FS_VERSION9P, 8192))
 		return EIO;
 
-	fid = o9fs_attach(omnt, o9fs_auth(omnt, "none", ""), "iru", "");
+	fid = o9fs_attach(fs, o9fs_auth(fs, "none", ""), "iru", "");
 	if (fid == NULL)
 		return EIO;
 
-	omnt->om_o9fs.rootfid = fid;
-//	omnt->om_o9fs.rootfid->stat = stat;
-	omnt->om_root->v_data = fid;
-	error = o9fs_allocvp(omnt->om_mp, fid, &omnt->om_root, VROOT);
+	fs->rootfid = fid;
+	fs->vroot->v_data = fid;
+	error = o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
 
 	return error;
 }
@@ -187,23 +185,20 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	struct vnode *vp;
 	struct proc *p;
 	struct o9fsfid *f;
-	struct o9fsstat *stat;
-	struct o9fsmount *omnt;
+	struct o9fs *fs;
 	int error;
 
 	p = curproc;
-	omnt = VFSTOO9FS(mp);
+	fs = VFSTOO9FS(mp);
 
-/*	vp = VFSTOO9FS(mp)->om_root;
+/*	vp = fs->vroot;
 	vref(vp);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-	*vpp = vp;*/
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p); */
 
-	f = o9fs_fclone(omnt, VTO9(omnt->om_root));
+	f = o9fs_clone(fs, VTO9(fs->vroot));
 	if (f == NULL)
 		return -1;
-//	f->stat = o9fs_fstat(omnt, f);
-	if(error = o9fs_allocvp(omnt->om_mp, f, &vp, VROOT))
+	if((error = o9fs_allocvp(fs->mp, f, &vp, VROOT)))
 		return error;
 	vp->v_flag = VROOT;
 	vp->v_type = VDIR;
@@ -217,17 +212,17 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 int
 o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 {
-	struct o9fsmount *omnt;
+	struct o9fs *fs;
 	struct vnode *vp;
 	struct o9fsfid *f;
 	struct file *fp;
 	int error, flags;
 	
 	flags = 0;
-	omnt = VFSTOO9FS(mp);
-	fp = omnt->om_fp;
+	fs = VFSTOO9FS(mp);
+	fp = fs->servfp;
 
-	vp = omnt->om_root;
+	vp = fs->vroot;
 	f = VTO9(vp);
 
 	if (mntflags & MNT_FORCE)
@@ -238,13 +233,13 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		return (error);
 
 	vput(vp);
-	o9fs_fidclunk(omnt, f);
-	o9fs_putfid(omnt, f);
+	o9fs_fidclunk(fs, f);
+	o9fs_putfid(fs, f);
 	fp->f_count--;
 	FRELE(fp);
-	free(omnt->om_o9fs.rpc, M_O9FS);
-	free(omnt, M_MISCFSMNT);
-	omnt = mp->mnt_data = (qaddr_t)0;
+	free(fs->rpc, M_O9FS);
+	free(fs, M_MISCFSMNT);
+	fs = mp->mnt_data = (qaddr_t)0;
 	
 	return 0;
 }
@@ -259,7 +254,7 @@ int
 o9fs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 {
 	sbp->f_bsize = DEV_BSIZE;
-	sbp->f_iosize = VFSTOO9FS(mp)->om_o9fs.msize;
+	sbp->f_iosize = VFSTOO9FS(mp)->msize;
 	sbp->f_blocks = 2;              /* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;

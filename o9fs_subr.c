@@ -19,26 +19,22 @@ enum {
 };
 
 struct o9fsfid *
-o9fs_getfid(struct o9fsmount *omnt)
+o9fs_getfid(struct o9fs *fs)
 {
         struct o9fsfid *f;
-        struct o9fs *fs;
         int i;
         
-        fs = &omnt->om_o9fs;
         if (fs->freefid == NULL) {
 				f = (struct o9fsfid *) malloc(sizeof(struct o9fsfid) * fidchunk,
                 	M_O9FS, M_WAITOK);
 				for (i = 0; i < fidchunk; i++) {
 						f[i].fid = fs->nextfid++;
 						f[i].next = &f[i+1];
-						f[i].fs = fs;
 						f[i].opened = 0;
-                }
+               			 }
 				f[i-1].next = NULL;
 				fs->freefid = f;
         }
-	//	rw_init(&f->rwl, "fidlock");
         f = fs->freefid;
         fs->freefid = f->next;
         f->offset = 0;
@@ -50,17 +46,54 @@ o9fs_getfid(struct o9fsmount *omnt)
 }
 
 void
-o9fs_putfid(struct o9fsmount *omnt, struct o9fsfid *f)
-{
-		struct o9fs *fs;
-        
+o9fs_putfid(struct o9fs *fs, struct o9fsfid *f)
+{        
 		DPRINT("putfid: enter\n");
 		if (f == NULL)
 			return;
-		fs = &omnt->om_o9fs;
 		f->next = fs->freefid;
 		fs->freefid = f;
 		DPRINT("putfid: return\n");
+}
+
+/* only clone a fid internally */
+struct o9fsfid *
+o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
+{
+	struct o9fsfid *nf;
+	
+	if (f->opened)
+	//	DPRINT("fidclone: fid=%d already opened\n", f->fid);
+		panic("clone of open fid=%d\n", f->fid);
+	
+	nf = o9fs_getfid(fs);
+	nf->mode = f->mode;
+	nf->qid.path = f->qid.path;
+	nf->qid.vers = f->qid.vers;
+	nf->qid.type = f->qid.type;
+	DPRINT("fidclone: fid=%d type=%d\n", f->fid, f->qid.type);
+//	memcpy(&nf->qid, &f->qid, sizeof(nf->qid));
+	nf->offset = f->offset;
+	return nf;
+}
+
+/* clone a fid both on the client and the server */
+struct o9fsfid *
+o9fs_clone(struct o9fs *fs, struct o9fsfid *f)
+{
+	struct o9fsfid *nf;
+	return o9fs_twalk(fs, f, 0);
+}
+
+/* guarantee the only copy of f */
+struct o9fsfid *
+o9fs_fidunique(struct o9fs *fs, struct o9fsfid *f)
+{
+	struct o9fsfid *nf;
+	nf = o9fs_clone(fs, f);
+	o9fs_fidclunk(fs, f);
+	f = nf;
+	return f;
 }
 
 void
