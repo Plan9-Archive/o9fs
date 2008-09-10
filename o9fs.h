@@ -1,4 +1,8 @@
+#ifdef DEBUG
 #define DPRINT printf
+#else
+#define DPRINT 
+#endif
 #define nelem(a) (sizeof(a) / sizeof(*a))
 
 struct o9fsqid {
@@ -30,13 +34,8 @@ struct o9fsfid {
 	int	opened;
 //	int ref;				/* reference count */
 	struct o9fsqid qid;
-	int64_t	offset;	
-//	struct	o9fs *fs;		/* our 9p session */
+	int64_t	offset;
 	struct	o9fsfid *next;
-
-	/* really? */
-	char		*name;
-	u_int	namelen;
 };
 
 
@@ -81,11 +80,11 @@ struct o9fsfcall
 
 struct o9fs {
 	/* mount info */
-	struct	mount *mp;		/* generic mount info */
+	struct	mount *mp;			/* generic mount info */
 	struct	vnode *vroot;		/* local root of the tree */
 	struct	file *servfp;
 	char		version[7];				/* version we are speaking */
-	int		msize;					/* max size of our payload */
+	long		msize;					/* max size of our payload */
 	
 	struct o9fsfcall	request;	/* request we are doing */
 	struct o9fsfcall	reply;		/* reply we received */
