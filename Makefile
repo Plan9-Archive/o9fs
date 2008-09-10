@@ -4,6 +4,7 @@ tgz:
 kern:
 	(cd /sys/arch/i386/compile/GENERIC && sudo sh -c "make && cp bsd /usr/iru/src/gsoc07/testing/bsd")
 
+CFLAGS+=
 NOMAN=
 LKM=\
 	o9fs_9p\
@@ -17,7 +18,7 @@ LKM=\
 	o9fs_vnops
 COMBINED=o9fs.o
 load:
-	modload -so o9fs $(COMBINED)
+	modload -o o9fs $(COMBINED)
 
 .include <bsd.lkm.mk>
 
