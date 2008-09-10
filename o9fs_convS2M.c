@@ -198,19 +198,15 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		return 0;
 	if (size > nap)
 		return 0;
-//	printf("sizenap ok\n");
 
 	p = (u_char*)ap;
 
 	O9FS_PBIT32(p, size);
 	p += O9FS_BIT32SZ;
-//	printf("size ok\n");
 	O9FS_PBIT8(p, f->type);
 	p += O9FS_BIT8SZ;
-//	printf("type ok\n");
 	O9FS_PBIT16(p, f->tag);
 	p += O9FS_BIT16SZ;
-//	printf("tag ok\n");
 
 	switch (f->type)
 	{
