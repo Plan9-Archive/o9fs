@@ -1,4 +1,3 @@
-
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>
@@ -24,25 +23,28 @@ o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 	DPRINT("fidclunk: return\n");
 }
 
-
-struct o9fsfid *
-o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, char *oname)
+struct o9fsfid*
+o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, struct o9fsfid *nf, char *oname)
 {
 	struct o9fsfcall tx, rx;
-	struct o9fsfid *nf;
-	int n, len;
+	int n;
 	char *name;
 
 	name = oname;
-	if (name) {
-		n = o9fs_tokenize(tx.wname, nelem(tx.wname), oname, '/');
-		nf = o9fs_getfid(fs);
-	} else {
-		DPRINT("twalk: cloning name=%s fid=%d\n", name, f->fid);
+	if (nf == NULL) {
+		DPRINT("twalk: cloning fid=%d\n", f->fid);
 		nf = o9fs_fidclone(fs, f);
 		n = 0;
 	}
 	
+	if (name) {
+		uint64_t len;
+		len = strlen(name);
+		tx.wname[0] = malloc(len, M_O9FS, M_WAITOK);
+		memcpy(tx.wname[0], name, len);
+		tx.wname[0][len] = 0;
+		n = 1;
+	}
 	tx.type = O9FS_TWALK;
 	tx.fid = f->fid;
 	tx.newfid = nf->fid;
@@ -50,24 +52,19 @@ o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, char *oname)
 
 	if ((o9fs_rpc(fs, &tx, &rx)) < 0) {
 		printf("walk: rpc failed\n");
-		goto fail;
+		return NULL;
 	}
 	if (rx.nwqid < n) {
 		printf("walk: nwqid < n\n");
-		goto fail;
+		return NULL;
 	}
 	
 	/* no negative numbers on the qid */
 	if (rx.nwqid > 0)
 		nf->qid = rx.wqid[n-1];
-/*	else
-		nf->qid = rx.wqid[0];*/
-
-	DPRINT("twalk: nf=%d -> qid.type = %d\n", nf->fid, nf->qid.type & O9FS_QTDIR);
+	else
+		nf->qid = rx.wqid[0];
 	return nf;
-fail:
-	o9fs_putfid(fs, nf);
-	return NULL;
 }
 
 struct o9fsstat *
@@ -104,10 +101,12 @@ o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf,
 	else
 		fs->request.offset = offset;
 
-	fs->request.data = uba;
+	if (type == O9FS_TWRITE)
+		fs->request.data = uba;
+
 	nr = n;
-	if (nr > fs->msize-O9FS_IOHDRSZ)
-		nr = fs->msize-O9FS_IOHDRSZ;
+	if (nr > fs->msize)
+		nr = fs->msize;
 	fs->request.count = nr;
 
 	if ((o9fs_rpc(fs, &fs->request, &fs->reply)) < 0)
