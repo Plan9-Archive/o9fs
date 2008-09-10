@@ -61,19 +61,16 @@ struct o9fsfid *
 o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
 {
 	struct o9fsfid *nf;
-	
+	DPRINT("o9fs_fidclone: enter\n");
 	if (f->opened)
-	//	DPRINT("fidclone: fid=%d already opened\n", f->fid);
 		panic("clone of open fid=%d\n", f->fid);
 	
 	nf = o9fs_getfid(fs);
+	DPRINT("o9fs_fidclone: got new fid\n");
 	nf->mode = f->mode;
-	nf->qid.path = f->qid.path;
-	nf->qid.vers = f->qid.vers;
-	nf->qid.type = f->qid.type;
-	DPRINT("fidclone: fid=%d type=%d\n", f->fid, f->qid.type);
-//	memcpy(&nf->qid, &f->qid, sizeof(nf->qid));
+	nf->qid = f->qid;
 	nf->offset = f->offset;
+	DPRINT("o9fs_fidclone: return\n");
 	return nf;
 }
 
@@ -81,8 +78,7 @@ o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
 struct o9fsfid *
 o9fs_clone(struct o9fs *fs, struct o9fsfid *f)
 {
-	struct o9fsfid *nf;
-	return o9fs_twalk(fs, f, 0);
+	return o9fs_twalk(fs, f, 0, 0);
 }
 
 /* guarantee the only copy of f */
