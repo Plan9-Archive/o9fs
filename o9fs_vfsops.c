@@ -191,6 +191,7 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	p = curproc;
 	fs = VFSTOO9FS(mp);
 
+	DPRINT("o9fs_root: enter\n");
 /*	vp = fs->vroot;
 	vref(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p); */
@@ -198,11 +199,13 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	f = o9fs_clone(fs, VTO9(fs->vroot));
 	if (f == NULL)
 		return -1;
+	DPRINT("o9fs_root: cloned root\n");
 	if((error = o9fs_allocvp(fs->mp, f, &vp, VROOT)))
 		return error;
 	vp->v_flag = VROOT;
 	vp->v_type = VDIR;
-	*vpp = vp; 
+	*vpp = vp;
+	DPRINT("o9fs_root: return\n");
 	return 0;
 }
 
