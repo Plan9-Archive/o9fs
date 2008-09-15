@@ -21,7 +21,7 @@ int o9fs_unmount(struct mount *, int, struct proc *);
 int o9fs_statfs(struct mount *, struct statfs *, struct proc *);
 int o9fs_start(struct mount *, int, struct proc *);
 int o9fs_root(struct mount *, struct vnode **);
-int	mounto9fs(struct o9fs_args *, struct mount *, char *, char *, struct file *);
+static int	mounto9fs(struct mount *, struct file *);
 struct o9fsfid *o9fs_attach(struct o9fs *, struct o9fsfid *, char *, char *);
 
 static long
@@ -103,7 +103,6 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 		struct nameidata *ndp, struct proc *p)
 {
 	struct o9fs_args args;
-	char host[MNAMELEN], root[MNAMELEN];
 	int error;
 	size_t len;
 	struct file *fp;
@@ -111,32 +110,32 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 	if (mp->mnt_flag & MNT_UPDATE)
 		return EOPNOTSUPP;
 
-	error = copyin(data, &args, sizeof(args));
+	error = copyin(data, &args, sizeof(struct o9fs_args));
 	if (error)
 		return error;
 
-	error = copyinstr(path, root, MNAMELEN - 1, &len);
-	if (error)
-		return error;
-	bzero(&root[len], MNAMELEN - len);
-	
-	error = copyinstr(args.hostname, host, MNAMELEN - 1, &len);
-	if (error)
-		return error;
-	bzero(&host[len], MNAMELEN - len);
-	
 	if ((fp = fd_getfile(p->p_fd, args.fd)) == NULL)
 		return EBADF;
 	fp->f_count++;
 	FREF(fp);
 
-	error = mounto9fs(&args, mp, root, host, fp);
-	return error;
+	if(mounto9fs(mp, fp))
+		return 1;
+
+	error = copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &len);
+	if (error)
+		return error;
+	bzero(mp->mnt_stat.f_mntonname + len, MNAMELEN - len);
+	
+	error = copyinstr(args.hostname, mp->mnt_stat.f_mntfromname, MNAMELEN - 1, &len);
+	if (error)
+		return error;
+	bzero(mp->mnt_stat.f_mntfromname + len, MNAMELEN - len);
+	return 0;
 }
 
-int
-mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host, 
-	struct file *fp)
+static int
+mounto9fs(struct mount *mp, struct file *fp)
 {
 	struct o9fs *fs;
 	struct vnode *rvp;
@@ -159,10 +158,7 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host,
 	fs->freefid = NULL;
 
 	mp->mnt_data = (qaddr_t) fs;
-	vfs_getnewfsid(mp);
-
-	bcopy(host, mp->mnt_stat.f_mntfromname, MNAMELEN);
-	bcopy(path, mp->mnt_stat.f_mntonname, MNAMELEN);
+	vfs_getnewfsid(mp);	
 
 	fs->rpc = malloc(8192+O9FS_IOHDRSZ, M_O9FS, M_WAITOK);
 	if (!o9fs_version(fs, O9FS_VERSION9P, 8192))
@@ -175,7 +171,6 @@ mounto9fs(struct o9fs_args *args, struct mount *mp, char *path, char *host,
 	fs->rootfid = fid;
 	fs->vroot->v_data = fid;
 	error = o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
-
 	return error;
 }
 	
@@ -236,8 +231,8 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		return (error);
 
 	vput(vp);
-	o9fs_fidclunk(fs, f);
-	o9fs_putfid(fs, f);
+	if (f)
+		o9fs_fidclunk(fs, f);
 	fp->f_count--;
 	FRELE(fp);
 	free(fs->rpc, M_O9FS);
