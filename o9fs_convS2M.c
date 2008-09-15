@@ -287,7 +287,6 @@ o9fs_convS2M(struct o9fsfcall *f, u_char *ap, u_int nap)
 		O9FS_PBIT32(p, f->count);
 		p += O9FS_BIT32SZ;
 		memcpy(p, f->data, f->count);
-		printf("twrite: %s\n", p);
 		p += f->count;
 		break;
 
