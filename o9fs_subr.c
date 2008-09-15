@@ -56,7 +56,7 @@ o9fs_putfid(struct o9fs *fs, struct o9fsfid *f)
 		DPRINT("putfid: return\n");
 }
 
-/* only clone a fid internally */
+/* clone a fid, client-side */
 struct o9fsfid *
 o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
 {
@@ -66,7 +66,6 @@ o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
 		panic("clone of open fid=%d\n", f->fid);
 	
 	nf = o9fs_getfid(fs);
-	DPRINT("o9fs_fidclone: got new fid\n");
 	nf->mode = f->mode;
 	nf->qid = f->qid;
 	nf->offset = f->offset;
@@ -74,7 +73,7 @@ o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
 	return nf;
 }
 
-/* clone a fid both on the client and the server */
+/* clone a fid, server-side */
 struct o9fsfid *
 o9fs_clone(struct o9fs *fs, struct o9fsfid *f)
 {
@@ -155,7 +154,7 @@ o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
 }
 
 int
-o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long flags)
+o9fs_allocvp(struct mount *mp, struct o9fsfid *f, struct vnode **vpp, u_long flag)
 {
 	struct vnode *vp;
 	struct proc *p;
@@ -176,15 +175,15 @@ o9fs_allocvp(struct mount *mp, struct o9fsfid *fid, struct vnode **vpp, u_long f
 		goto out;
 	}
 
-	if (fid->qid.type == O9FS_QTDIR)
+	if (f->qid.type == O9FS_QTDIR){
+		DPRINT("o9fs_fid2vnode: isdir\n");
 		vp->v_type = VDIR;
-	else
+	} else
 		vp->v_type = VREG;
 
-	vp->v_data = fid;
+	vp->v_data = f;
 	vp->v_flag = 0;
-	vp->v_flag |= flags;
-
+	vp->v_flag |= flag;
 out:
 	*vpp = vp;
 	return error;
