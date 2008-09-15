@@ -52,6 +52,7 @@ o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, struct o9fsfid *nf, char *oname)
 
 	if ((o9fs_rpc(fs, &tx, &rx)) < 0) {
 		printf("walk: rpc failed\n");
+		o9fs_putfid(fs, nf);
 		return NULL;
 	}
 	if (rx.nwqid < n) {
@@ -123,3 +124,32 @@ o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf,
 		f->offset += fs->reply.count;
 	return nr;
 }
+
+int
+o9fs_opencreate(int type, struct o9fs *fs, struct o9fsfid *f, int mode, ulong perm, char *name)
+{
+	int omode, error;
+	struct o9fsfcall tx, rx;
+	
+	omode = o9fs_uflags2omode(mode);
+
+	tx.type = type;
+	tx.fid = f->fid;
+	tx.mode = omode;
+	if (type == O9FS_TCREATE) {
+		tx.name = name;
+		tx.mode = O9FS_ORDWR; /* try ORDWR on open */
+		tx.perm = o9fs_utopmode(perm);
+	}
+
+	error = o9fs_rpc(fs, &tx, &rx);
+	if (error)
+		return error;
+
+	f->qid = rx.qid;
+	f->offset = 0;
+	f->opened = 1;
+	f->mode = omode;
+	return 0;
+}
+
