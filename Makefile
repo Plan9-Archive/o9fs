@@ -4,7 +4,7 @@ tgz:
 kern:
 	(cd /sys/arch/i386/compile/GENERIC && sudo sh -c "make && cp bsd /usr/iru/src/gsoc07/testing/bsd")
 
-CFLAGS+=
+CFLAGS+=-DDEBUG
 NOMAN=
 LKM=\
 	o9fs_9p\

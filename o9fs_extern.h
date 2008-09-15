@@ -20,6 +20,7 @@ struct	o9fsstat *o9fs_fstat(struct o9fs *, struct o9fsfid *);
 long	o9fs_rdwr(struct o9fs *, int, struct o9fsfid *, void *, u_long, int64_t);
 void	o9fs_fidclunk(struct o9fs *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fs *, struct o9fsfid *, struct o9fsfid *, char *);
+int		o9fs_opencreate(int, struct o9fs *, struct o9fsfid *, int, ulong);
 
 /* o9fs_conv* */
 u_char	*pstring(u_char *, char *);
