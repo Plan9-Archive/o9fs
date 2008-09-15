@@ -97,7 +97,7 @@ struct vnodeopv_entry_desc o9fs_vnodeop_entries[] = {
 struct vnodeopv_desc o9fs_vnodeop_opv_desc =
 	{ &o9fs_vnodeop_p, o9fs_vnodeop_entries };
 
-int
+int 
 o9fs_open(void *v)
 {
 	struct vop_open_args *ap;
@@ -114,29 +114,28 @@ o9fs_open(void *v)
 	p = ap->a_p;
 	mode = o9fs_uflags2omode(ap->a_mode);
 	fs = VFSTOO9FS(vp->v_mount);
+	f = VTO9(vp);
 
-//	f = o9fs_fidunique(fs, VTO9(vp));
-	f = o9fs_clone(fs, VTO9(vp));
 	if (f->opened == 1) {
-		DPRINT("open: already opened: fid->fid=%d vp=%p vp->v_data->fid=%d\n",
-			f->fid, vp, VTO9(vp)->fid);
-		DPRINT("open: return\n");
-		return 0;
+		DPRINT("open: already opened\n");
+		goto out;
 	}
+	
+	f = o9fs_clone(fs, f);
+	if (f == NULL)
+		return -1;
+	
+	if(o9fs_opencreate(O9FS_TOPEN, fs, f, ap->a_mode, 0, 0))
+		return -1;
 
-	tx.type = O9FS_TOPEN;
-	tx.fid = f->fid;
-	tx.mode = mode;
-	
-	error = o9fs_rpc(fs, &tx, &rx);
-	if (error)
-		return error;
-	
-	f->mode = mode;
-	f->opened = 1;
-	f->offset = 0;
-	vp->v_data = f;
-	DPRINT("open: return\n");
+	vp->v_data = f; /* walk has set other properties */
+	f->qid = rx.qid;
+	if(rx.qid.type == O9FS_QTDIR)
+		vp->v_type = VDIR;
+	else
+		vp->v_type = VREG;
+out:
+	DPRINT("open: return (%p)->v_type=%d\n", vp, vp->v_type);
 	return 0;
 }
 
@@ -192,42 +191,28 @@ o9fs_create(void *v)
 	struct vnode *dvp, **vpp;
 	struct componentname *cnp;
 	struct vattr *vap;
-	struct o9fsfcall tx, rx;
-	struct o9fsfid *f, *ofid;
+	struct o9fsfid *f, *dirfid;
 	struct o9fs *fs;
-	struct o9fsstat *stat;
-	int error, isdir;
+	int error;
 	
 	ap = v;
 	dvp = ap->a_dvp;
 	cnp = ap->a_cnp;
 	vap = ap->a_vap;
 	vpp = ap->a_vpp;
-	ofid = VTO9(dvp);
-	isdir = vap->va_mode & S_IFDIR;
+	dirfid = VTO9(dvp);
 
 	*vpp = NULL;
-	stat = (struct o9fsstat *) malloc(sizeof(struct o9fsstat), M_O9FS, M_WAITOK);
 	fs = VFSTOO9FS(dvp->v_mount);
-
 	if (f == NULL)
 		return -1;
 
-	stat->mode = 0;
-	stat->atime = 0;
-	stat->mtime = 0;
-	stat->name = cnp->cn_nameptr;
-	stat->uid = 0;
-	stat->gid = 0;
 
-	tx.type = O9FS_TCREATE;
-	tx.name = cnp->cn_nameptr;
-	tx.fid = f->fid;
-	tx.mode = o9fs_uflags2omode(vap->va_mode);
-	tx.perm = o9fs_utopmode(vap->va_mode);
+	f = o9fs_clone(fs, dirfid);
+	if (f == NULL)
+		goto out;
 
-	error = o9fs_rpc(fs, &tx, &rx);
-	if (error == -1)
+	if(o9fs_opencreate(O9FS_TCREATE, fs, f, 0, vap->va_mode, cnp->cn_nameptr))
 		goto out;
 
 	error = o9fs_allocvp(dvp->v_mount, f, vpp, 0);
@@ -235,17 +220,12 @@ o9fs_create(void *v)
 		o9fs_freevp(*vpp);
 		goto out;
 	}
-	printfidvp(f);
-	printfidvp(ofid);
 
-	f->mode = rx.mode;
-	if (!isdir)
-		f->opened = 1;
-	else {
-		/* since Tcreate opens a fid, if it is a dir, close it in order to use it */
-		o9fs_fidclunk(fs, f);
-	}
-
+	if(f->qid.type == O9FS_QTDIR)
+		(*vpp)->v_type = VDIR;
+	else
+		(*vpp)->v_type = VREG;
+	o9fs_fidclunk(fs, dirfid);
 out:
 	vput(dvp);
 	return error;
@@ -308,6 +288,8 @@ o9fs_read(void *v)
 		error = uiomove(fs->reply.data, n, uio);
 	else if (n < 0)
 		error = n;
+
+	free(buf, M_O9FS);
 	return error;
 }
 
@@ -442,6 +424,7 @@ o9fs_write(void *v)
 	int64_t len;
 	off_t offset;
 
+	DPRINT("write: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
@@ -449,8 +432,12 @@ o9fs_write(void *v)
 	f = VTO9(vp);
 	error = n = 0;
 
-	if (uio->uio_offset < 0 || vp->v_type != VREG)
+	DPRINT("write: vp=%p v_type=%d\n", vp, vp->v_type); 
+
+	if (uio->uio_offset < 0 || vp->v_type != VREG) {
+		DPRINT("write: return EINVAL\n");
 		return EINVAL;
+	}
 
 	if (uio->uio_resid == 0)
 		return 0;
@@ -472,8 +459,8 @@ o9fs_write(void *v)
 	n = o9fs_rdwr(VFSTOO9FS(vp->v_mount), O9FS_TWRITE, f, buf, len, offset);
 	if (n < 0)
 		return -1;
-
 	free(buf, M_O9FS);
+	DPRINT("write: return\n");
 	return error;
 }
 
@@ -504,8 +491,9 @@ o9fs_lookup(void *v)
 	dfid = VTO9(dvp);			/* parent dir fid */
 	fs = VFSTOO9FS(dvp->v_mount);
 
+	/* XXX correct dot/dotdot semantics */
 	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-		DPRINT("lookup: dot, real name is %s\n", dfid->name);
+		DPRINT("lookup: dot\n");
 		fid = o9fs_clone(fs, dfid);
 		if (fid == NULL)
 			goto bad;
@@ -519,15 +507,16 @@ o9fs_lookup(void *v)
 		strlcpy(namep, cnp->cn_nameptr, cnp->cn_namelen+1);
 		o9fs_tokenize(path, nelem(path), namep, '/');
 	}
-
-	DPRINT("lookup: gonna walk\n");
-	fid = o9fs_twalk(fs, dfid, *path);
-	if (fid == NULL) {
+	
+	if ((fid = o9fs_twalk(fs, dfid, 0, *path)) == NULL) {
 		/* it is fine to fail walking when we are creating
 	 	 * or renaming on the last component of the path name
 	 	 */
 		if (islast && (nameiop == CREATE || nameiop == RENAME)) {
 			printf("lookup: creating\n");
+		/*	error = o9fs_allocvp(fs->mp, fid, vpp, 0); 
+			if (error)
+				goto bad; */
 			/* save the name. it's gonna be used soon */
 			cnp->cn_flags |= SAVENAME;
 			error = EJUSTRETURN;
@@ -535,10 +524,10 @@ o9fs_lookup(void *v)
 			return error;
 		} else
 			/* it wasn't found at all */
+			o9fs_putfid(fs, fid);
 			goto bad;
 	}
 
-	DPRINT("lookup: name=%s QTDIR=%d\n", fid->name, fid->qid.type & O9FS_QTDIR);
 	error = o9fs_allocvp(fs->mp, fid, vpp, 0);
 	if (error)
 		goto bad;
@@ -577,9 +566,6 @@ o9fs_getattr(void *v)
 
 	if (!f)
 		return 0;
-	/* lookup fetches stat for us since the only way for
-	  * a file to have is attributes updated are through a new walk
-           */
 	stat = o9fs_fstat(fs, f);
 	if (stat == NULL) {
 		DPRINT("getattr: Tstat failed\n");
@@ -613,7 +599,6 @@ o9fs_getattr(void *v)
 
 	o9fs_freestat(stat);
 	free(stat, M_O9FS);
-	o9fs_fidclunk(fs, f);
 	DPRINT("getattr: return\n");
 	return 0;
 }
@@ -658,13 +643,19 @@ o9fs_reclaim(void *v)
 {
 	struct vop_reclaim_args *ap;
 	struct vnode *vp;
+	struct o9fsfid *f;
+	struct o9fs *fs;
 
 	DPRINT("reclaim: enter\n");
 	ap = v;
 	vp = ap->a_vp;
+	f = VTO9(vp);
+	fs = VFSTOO9FS(vp->v_mount);
 
 	cache_purge(vp);
-	DPRINT("reclaiming fid %d\n", VTO9(vp)->fid);
+	DPRINT("reclaiming fid %d\n", f->fid);
+	if(f)
+		o9fs_fidclunk(fs, f);
 	o9fs_freevp(vp);
 
 	DPRINT("reclaim: return\n");
