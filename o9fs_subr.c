@@ -39,6 +39,7 @@ o9fs_getfid(struct o9fs *fs)
         fs->freefid = f->next;
         f->offset = 0;
         f->mode = -1;
+		f->ref = 0;
         f->qid.path = 0;
         f->qid.vers = 0;
         f->qid.type = 0;
