@@ -42,7 +42,7 @@ int o9fs_mkdir(void *);
 int o9fs_readdir(void *);
 #define o9fs_revoke	vop_generic_revoke
 #define	o9fs_readlink	eopnotsupp
-#define	o9fs_inactive	eopnotsupp
+int o9fs_inactive(void *);
 int o9fs_reclaim(void *);
 #define	o9fs_lock	vop_generic_lock
 #define	o9fs_unlock	vop_generic_unlock
@@ -105,7 +105,6 @@ o9fs_open(void *v)
 	struct proc *p;
 	struct o9fs *fs;
 	struct o9fsfid *f;
-	struct o9fsfcall tx, rx;
 	int error, mode;
 
 	DPRINT("open: enter\n");
@@ -129,11 +128,12 @@ o9fs_open(void *v)
 		return -1;
 
 	vp->v_data = f; /* walk has set other properties */
-	f->qid = rx.qid;
-	if(rx.qid.type == O9FS_QTDIR)
+
+	if(f->qid.type == O9FS_QTDIR)
 		vp->v_type = VDIR;
 	else
 		vp->v_type = VREG;
+
 out:
 	DPRINT("open: return (%p)->v_type=%d\n", vp, vp->v_type);
 	return 0;
@@ -160,6 +160,7 @@ o9fs_close(void *v)
 
 	DPRINT("close: fid=%d\n", f->fid);
 	fs = VFSTOO9FS(vp->v_mount);
+
 	o9fs_fidclunk(fs, f);
 	vp->v_data = NULL;
 	DPRINT("close: return\n");
@@ -491,32 +492,39 @@ o9fs_lookup(void *v)
 	dfid = VTO9(dvp);			/* parent dir fid */
 	fs = VFSTOO9FS(dvp->v_mount);
 
+	DPRINT("lookup: checking dot\n");
 	/* XXX correct dot/dotdot semantics */
-	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-		DPRINT("lookup: dot\n");
-		fid = o9fs_clone(fs, dfid);
-		if (fid == NULL)
-			goto bad;
-		error = o9fs_allocvp(fs->mp, fid, vpp, 0); 
+/*	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
+		DPRINT("lookup: isdot\n");
+		if (dfid->opened){
+			o9fs_fidclunk(fs, dfid);
+			fid = dfid;
+		else {
+			fid = o9fs_twalk(fs, dfid, 0, ".");
+			if (fid == NULL)
+				goto bad;
+		}
+		error = o9fs_allocvp(fs->mp, fid, vpp, 0);
 		if (error)
-			goto bad; 
-		VREF(*vpp);
-		DPRINT("lookup: return\n");
-		return 0;
-	} else {
+			goto bad;*/
+
+	/*	*vpp = dvp;
+		VREF(*vpp); */
+	//	DPRINT("lookup: return\n");
+	//	return 0;
+//	} else {
+//		DPRINT("lookup: not dot\n");
 		strlcpy(namep, cnp->cn_nameptr, cnp->cn_namelen+1);
 		o9fs_tokenize(path, nelem(path), namep, '/');
-	}
+//	}
 	
+	DPRINT("lookup: walking... ");
 	if ((fid = o9fs_twalk(fs, dfid, 0, *path)) == NULL) {
+		DPRINT("not ok\n");
 		/* it is fine to fail walking when we are creating
 	 	 * or renaming on the last component of the path name
 	 	 */
 		if (islast && (nameiop == CREATE || nameiop == RENAME)) {
-			printf("lookup: creating\n");
-		/*	error = o9fs_allocvp(fs->mp, fid, vpp, 0); 
-			if (error)
-				goto bad; */
 			/* save the name. it's gonna be used soon */
 			cnp->cn_flags |= SAVENAME;
 			error = EJUSTRETURN;
@@ -528,6 +536,7 @@ o9fs_lookup(void *v)
 			goto bad;
 	}
 
+	DPRINT("ok\n");
 	error = o9fs_allocvp(fs->mp, fid, vpp, 0);
 	if (error)
 		goto bad;
@@ -612,14 +621,12 @@ o9fs_setattr(void *v)
 	/*
 	 * Can't mess with the root vnode
 	 */
-	printf(">setattr\n");
 
 	if (ap->a_vp->v_flag & VROOT)
 		return EACCES;
 
 	if (ap->a_vap->va_flags != VNOVAL)
 		return EOPNOTSUPP;
-	printf("<setattr\n");
 	return 0;
 }
 
@@ -635,6 +642,15 @@ o9fsrealloc(void *ptr, size_t oldsize, size_t newsize)
 		bcopy(ptr, p, oldsize);
 	ptr = p;
 	return p;
+}
+
+int
+o9fs_inactive(void *v)
+{
+	struct vop_inactive_args *ap;
+	DPRINT("inactive: enter\n");
+	DPRINT("inactive: return\n");
+	return 0;
 }
 
 /* this should suffice for now */
