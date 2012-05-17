@@ -46,6 +46,39 @@ rdwr(struct o9fs *fs, void *buf, long count, off_t *offset, int write)
 	return cnt;
 }
 
+long
+o9fs_mio(struct o9fs *fs, u_long len)
+{
+	long n;
+
+	n = rdwr(fs, fs->outbuf, len, &fs->servfp->f_offset, 1);
+	if (n <= 0)
+		return n;
+
+	n = rdwr(fs, fs->inbuf, 4, &fs->servfp->f_offset, 0);
+	if (n <= 0) {
+		printf("o9fs_mio: Error reading message size\n");
+		return n;
+	}
+	
+	len = O9FS_GBIT32(fs->inbuf);
+	if (len <= 4) {
+		printf("R-message with length < 4\n");
+		return -1;
+	}
+
+	n = rdwr(fs, fs->inbuf + Offtype, len - Offtype, &fs->servfp->f_offset, 0);
+	if (n <= 0)
+		return n;
+
+	if (O9FS_GBIT8(fs->inbuf + Offtype) == O9FS_RERROR) {
+		printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 4);
+		return -1;
+	}
+
+	return len;
+}
+
 int
 o9fs_rpc(struct o9fs *fs, struct o9fsfcall *tx, struct o9fsfcall *rx)
 {

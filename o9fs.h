@@ -78,21 +78,33 @@ struct o9fsfcall
 	u_char			*stat;				/* Twstat, Rstat */
 };
 
+enum {
+	Offtype	= 4,
+	Offtag	= 5,
+
+	Minhd	= Offtag + 2,		/* Minimum 9P header size, independent of message type */
+	Maxhd	= 23,						/* Maximum 9P header size */
+};
+
 struct o9fs {
-	/* mount info */
-	struct	mount *mp;			/* generic mount info */
-	struct	vnode *vroot;		/* local root of the tree */
-	struct	file *servfp;
-	char		version[7];				/* version we are speaking */
-	long		msize;					/* max size of our payload */
+	struct	mount *mp;
+	struct	vnode *vroot;		/* Local root of the tree */
+	struct	file *servfp;		/* File pointing to the server */
+	long	msize;				/* Maximum size of our payload */
 	
 	struct o9fsfcall	request;	/* request we are doing */
 	struct o9fsfcall	reply;		/* reply we received */
 	u_char	*rpc;
-	long	rpclen;
 
-/*	int	ref;
-	int	fd; */
+	/* 
+     * Buffers for I/O
+	 * Both buffers have the client requested msize,
+	 * but only the number of bytes in this structure's msize
+	 * should be used.
+	 */
+	u_char	*inbuf;
+	u_char	*outbuf;
+
 	int	nextfid;
 	struct	o9fsfid *rootfid;
 	struct	o9fsfid *freefid;
@@ -120,11 +132,11 @@ struct o9fs {
 #define O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
 						((uint64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
  
-#define O9FS_PBIT8(p,v)		(p)[0]=(v)
-#define O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8   
-#define O9FS_PBIT32(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24
-#define O9FS_PBIT64(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24;\
-							(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
+#define O9FS_PBIT8(p,v)		((qaddr_t)(p))[0]=(v)
+#define O9FS_PBIT16(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8   
+#define O9FS_PBIT32(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8;((qaddr_t)(p))[2]=(v)>>16;((qaddr_t)(p))[3]=(v)>>24
+#define O9FS_PBIT64(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8;((qaddr_t)(p))[2]=(v)>>16;((qaddr_t)(p))[3]=(v)>>24;\
+							((qaddr_t)(p))[4]=(v)>>32;((qaddr_t)(p))[5]=(v)>>40;((qaddr_t)(p))[6]=(v)>>48;((qaddr_t)(p))[7]=(v)>>56
 
 #define O9FS_BIT8SZ		1
 #define O9FS_BIT16SZ	2

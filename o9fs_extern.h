@@ -20,7 +20,7 @@ struct	o9fsstat *o9fs_fstat(struct o9fs *, struct o9fsfid *);
 long	o9fs_rdwr(struct o9fs *, int, struct o9fsfid *, void *, u_long, int64_t);
 void	o9fs_fidclunk(struct o9fs *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fs *, struct o9fsfid *, struct o9fsfid *, char *);
-int		o9fs_opencreate(int, struct o9fs *, struct o9fsfid *, int, ulong);
+int		o9fs_opencreate(int, struct o9fs *, struct o9fsfid *, int, ulong, char *);
 
 /* o9fs_conv* */
 u_char	*pstring(u_char *, char *);
@@ -39,5 +39,6 @@ u_int	o9fs_convM2D(u_char *, u_int, struct o9fsstat *, char *);
 
 /* o9fs_rpc.c */
 int		o9fs_rpc(struct o9fs *, struct o9fsfcall *, struct o9fsfcall *);
+long	o9fs_mio(struct o9fs *, u_long);
 
 extern int (**o9fs_vnodeop_p)(void *);

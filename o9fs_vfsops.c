@@ -7,7 +7,7 @@
 #include <sys/mbuf.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/malloc.h> 
 #include <sys/filedesc.h>
 #include <sys/file.h>
 
@@ -25,20 +25,28 @@ static int	mounto9fs(struct mount *, struct file *);
 struct o9fsfid *o9fs_attach(struct o9fs *, struct o9fsfid *, char *, char *);
 
 static long
-o9fs_version(struct o9fs *fs, char *version, int msize)
+o9fs_version(struct o9fs *fs, uint32_t msize)
 {
-	struct o9fsfcall f, rx;
-	
-	f.type = O9FS_TVERSION;
-	f.tag = O9FS_NOTAG;
-	f.msize = msize;
-	f.version = version;
+	long n;
+	u_char *p;
 
-	if ((o9fs_rpc(fs, &f, &rx)) == -1)
-		return 0;
+	if (fs == NULL)
+		return -1;
 
-	return fs->msize = rx.msize;
-}
+	p = fs->outbuf;
+
+	O9FS_PBIT32(p, 19);
+	O9FS_PBIT8(p + Offtype, O9FS_TVERSION);
+	O9FS_PBIT16(p + Offtag, O9FS_NOTAG);
+	O9FS_PBIT32(p + Minhd, msize);
+	O9FS_PBIT16(p + Minhd + 4, 6);
+	memmove(p + Minhd + 4 + 2, "9P2000", 6);
+
+	n = o9fs_mio(fs, 19);
+	if (n <= 0)
+		return -1;
+	return fs->msize = O9FS_GBIT16(fs->inbuf + Minhd + 4);
+}	
 
 static struct o9fsfid *
 o9fs_auth(struct o9fs *fs, char *user, char *aname)
@@ -97,7 +105,49 @@ o9fs_attach(struct o9fs *fs, struct o9fsfid *afid,
 	fid->qid = rx.qid;
 	return fid;
 }
+
+int
+mounto9fs(struct mount *mp, struct file *fp)
+{
+	struct o9fs *fs;
+	struct vnode *rvp;
+	struct o9fsfid *fid;
+	int error;
+
+	error = 0;
+	fs = (struct o9fs *) malloc(sizeof(struct o9fs), M_MISCFSMNT, M_WAITOK | M_ZERO);
+	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &rvp);
+	if (error)
+		return error;
+
+	rvp->v_type = VDIR;
+	rvp->v_flag = VROOT;
+
+	fs->vroot = rvp;
+	fs->mp = mp;
+	fs->servfp = fp;
+
+	mp->mnt_data = (qaddr_t) fs;
+	vfs_getnewfsid(mp);	
+
+	fs->inbuf = malloc(8192+Maxhd, M_O9FS, M_WAITOK | M_ZERO);
+	fs->outbuf = malloc(8192+Maxhd, M_O9FS, M_WAITOK | M_ZERO);
+
+	if(o9fs_version(fs, 8192) < 0)
+		return EIO;
+	return EIO;
+
+	fid = o9fs_attach(fs, o9fs_auth(fs, "none", ""), "iru", "");
+	if (fid == NULL)
+		return EIO;
+
+	fs->rootfid = fid;
+	fs->vroot->v_data = fid;
+	error = o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
+	return error;
+}
 	
+
 int
 o9fs_mount(struct mount *mp, const char *path, void *data, 
 		struct nameidata *ndp, struct proc *p)
@@ -134,46 +184,6 @@ o9fs_mount(struct mount *mp, const char *path, void *data,
 	return 0;
 }
 
-static int
-mounto9fs(struct mount *mp, struct file *fp)
-{
-	struct o9fs *fs;
-	struct vnode *rvp;
-	struct o9fsfid *fid;
-	int error;
-
-	error = 0;
-	fs = (struct o9fs *) malloc(sizeof(struct o9fs), M_MISCFSMNT, M_WAITOK);
-
-	error = getnewvnode(VT_O9FS, mp, o9fs_vnodeop_p, &rvp);
-	if (error)
-		return (error);
-
-	rvp->v_type = VDIR;
-	rvp->v_flag = VROOT;
-	fs->vroot = rvp;
-	fs->mp = mp;
-	fs->servfp = fp;
-	fs->nextfid = 0;
-	fs->freefid = NULL;
-
-	mp->mnt_data = (qaddr_t) fs;
-	vfs_getnewfsid(mp);	
-
-	fs->rpc = malloc(8192+O9FS_IOHDRSZ, M_O9FS, M_WAITOK);
-	if (!o9fs_version(fs, O9FS_VERSION9P, 8192))
-		return EIO;
-
-	fid = o9fs_attach(fs, o9fs_auth(fs, "none", ""), "iru", "");
-	if (fid == NULL)
-		return EIO;
-
-	fs->rootfid = fid;
-	fs->vroot->v_data = fid;
-	error = o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
-	return error;
-}
-	
 int
 o9fs_root(struct mount *mp, struct vnode **vpp)
 {

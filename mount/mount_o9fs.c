@@ -40,16 +40,15 @@ connunix(char *path)
 
 	s = socket(PF_UNIX, SOCK_STREAM, 0);
 	if (s < 0)
-		err(1, "socket");
+		err(1, "Failed to create UNIX socket");
 
 	bzero(&channel, sizeof(channel));
 	channel.sun_family = PF_UNIX;
 	channel.sun_len = strlen(path);
-	strlcpy(channel.sun_path, path, 104); /* XXX openbsd specific? */
+	strlcpy(channel.sun_path, path, sizeof(channel.sun_path));
 
 	if ((connect(s, (struct sockaddr *) &channel, sizeof(channel))) < 0)
-		err(1, "connect");
-
+		err(1, "Failed to connect");
 	return s;
 }
 
@@ -61,74 +60,49 @@ conninet(char *host, int port)
 	struct sockaddr_in con;
 
 	hp = gethostbyname(host);
-	if (!hp)
-		err(1, "gethostbyname");
+	if (hp == NULL)
+		err(1, "Failed to resolve name %s", host);
 
 	s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s < 0)
-		err(1, "socket");
+		err(1, "Failed to create INET socket");
 
 	bzero(&con, sizeof(con));
 	con.sin_family = AF_INET;
-	memcpy(&con.sin_addr.s_addr, hp->h_addr, hp->h_length);
+	memmove(&con.sin_addr.s_addr, hp->h_addr, hp->h_length);
 	con.sin_port = htons(port);
+
 	if((connect(s, (struct sockaddr *) &con, sizeof(struct sockaddr_in))) < 0)
-		err(1, "connect");
+		err(1, "Failed to connect");
 	return s;
 }
 
-struct addr9p {
-	char type[4];	   /* unix or net */
-	char addr[256];	 /* address or path */
-	int port;				/* port if net */
-};
-
-struct addr9p *
-parseaddr(char *arg)
-{
-	struct addr9p *a;
-	char *p, *s;
-	int i;
-
-	s = strdup(arg);
-	printf("duped: %s\n", s);
-	p = s;
-	if (!p)
-		return NULL;
-	a = malloc(sizeof(struct addr9p));
-	if (!a)
-		err(1, "parseaddr: malloc");
-
-	/* get type */
-	for (i = 0; *p && *p != '!'; i++)
-		a->type[i] = *p++;
-	a->type[i] = 0;
-	p++; /* skip ! */
-
-	/* get address */
-	for (i = 0; *p && *p != '!'; i++)
-		a->addr[i] = *p++;
-	a->addr[i] = 0;
-	p++; /* skip ! */
-
-	p[5] = 0; /* port are 5 chars max */
-		a->port = -1;
-	if (!strcmp(a->type, "net"))
-		a->port = atoi(p);
-	free(s);
-	return a;
-}
-
-	
+/*
+ * Parse either unix or network address argument and connect accordingly.
+ * Return the connected file descriptor.
+ */
 int
-dial(char *addr)
+dial(char *arg)
 {
-	struct addr9p *a;
-	
-	a = parseaddr(addr);
-	if (a->port != -1)
-		return conninet(a->addr, a->port);
-	return connunix(a->addr);
+	char *p, addr[MAXPATHLEN];
+	int i, port;
+
+	if (arg == NULL)
+		return -1;
+
+	p = arg;
+	i = 0;
+	while (*p != '\0' && *p != '!')
+		addr[i++] = *p++;
+	addr[i] = '\0';
+
+	if (*p == '!') {
+		p++;
+		port = atoi(p);
+		return conninet(addr, port);
+	}
+
+	return connunix(addr);
 }
 	
 	
@@ -158,9 +132,8 @@ main(int argc, char *argv[])
 
 	args.hostname = argv[0];
 	args.fd = dial(argv[0]);
-
-	printf("args.hostname = %s\n", args.hostname);
-	printf("args.fd = %d\n", args.fd);
+	if (args.fd < 0)
+		err(1, "Failed to dial");
 
 	if (realpath(argv[1], node) == NULL)
 		err(1, "realpath %s", argv[1]);

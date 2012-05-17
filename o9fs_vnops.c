@@ -25,78 +25,58 @@ int o9fs_open(void *);
 int o9fs_close(void *);
 int o9fs_lookup(void *);
 int o9fs_create(void *);
-#define	o9fs_mknod	eopnotsupp
 int o9fs_access(void *);
 int o9fs_getattr(void *);
 int o9fs_setattr(void *);
 int o9fs_read(void *);
 int o9fs_write(void *);
 int o9fs_mkdir(void *);
-#define	o9fs_ioctl	(int (*)(void *))enoioctl
-#define	o9fs_fsync	nullop
-#define	o9fs_remove	eopnotsupp
-#define	o9fs_link	eopnotsupp
-#define	o9fs_rename	eopnotsupp
-#define	o9fs_rmdir	eopnotsupp
-#define	o9fs_symlink	eopnotsupp
 int o9fs_readdir(void *);
-#define o9fs_revoke	vop_generic_revoke
-#define	o9fs_readlink	eopnotsupp
 int o9fs_inactive(void *);
 int o9fs_reclaim(void *);
-#define	o9fs_lock	vop_generic_lock
-#define	o9fs_unlock	vop_generic_unlock
-#define	o9fs_bmap	eopnotsupp
-#define	o9fs_strategy	eopnotsupp	
-#define	o9fs_print	eopnotsupp
-#define	o9fs_islocked	vop_generic_islocked
-#define	o9fs_pathconf	eopnotsupp
-#define	o9fs_advlock	eopnotsupp
-#define	o9fs_bwrite	eopnotsupp
-#define	o9fs_poll	eopnotsupp
 
 int (**o9fs_vnodeop_p)(void *);
-struct vnodeopv_entry_desc o9fs_vnodeop_entries[] = {
-	{ &vop_default_desc, eopnotsupp },
-	{ &vop_lookup_desc, o9fs_lookup },		/* lookup */
-	{ &vop_create_desc, o9fs_create },		/* create */
-	{ &vop_mknod_desc, o9fs_mknod },		/* mknod */
-	{ &vop_open_desc, o9fs_open },		/* open */
-	{ &vop_close_desc, o9fs_close },		/* close */
-	{ &vop_access_desc, o9fs_access },		/* access */
-	{ &vop_getattr_desc, o9fs_getattr },		/* getattr */
-	{ &vop_setattr_desc, o9fs_setattr },		/* setattr */
-	{ &vop_read_desc, o9fs_read },		/* read */
-	{ &vop_write_desc, o9fs_write },		/* write */
-	{ &vop_ioctl_desc, o9fs_ioctl },		/* ioctl */
-	{ &vop_poll_desc, o9fs_poll },		/* poll */
-	{ &vop_revoke_desc, o9fs_revoke },            /* revoke */
-	{ &vop_fsync_desc, o9fs_fsync },		/* fsync */
-	{ &vop_remove_desc, o9fs_remove },		/* remove */
-	{ &vop_link_desc, o9fs_link },		/* link */
-	{ &vop_rename_desc, o9fs_rename },		/* rename */
-	{ &vop_mkdir_desc, o9fs_mkdir },		/* mkdir */
-	{ &vop_rmdir_desc, o9fs_rmdir },		/* rmdir */
-	{ &vop_symlink_desc, o9fs_symlink },		/* symlink */
-	{ &vop_readdir_desc, o9fs_readdir },		/* readdir */
-	{ &vop_readlink_desc, o9fs_readlink },	/* readlink */
-	{ &vop_abortop_desc, vop_generic_abortop },		/* abortop */
-	{ &vop_inactive_desc, o9fs_inactive },	/* inactive */
-	{ &vop_reclaim_desc, o9fs_reclaim },		/* reclaim */
-	{ &vop_lock_desc, o9fs_lock },		/* lock */
-	{ &vop_unlock_desc, o9fs_unlock },		/* unlock */
-	{ &vop_bmap_desc, o9fs_bmap },		/* bmap */
-	{ &vop_strategy_desc, o9fs_strategy },	/* strategy */
-	{ &vop_print_desc, o9fs_print },		/* print */
-	{ &vop_islocked_desc, o9fs_islocked },	/* islocked */
-	{ &vop_pathconf_desc, o9fs_pathconf },	/* pathconf */
-	{ &vop_advlock_desc, o9fs_advlock },		/* advlock */
-	{ &vop_bwrite_desc, o9fs_bwrite },		/* bwrite */
-	{ NULL, NULL }
-};
-struct vnodeopv_desc o9fs_vnodeop_opv_desc =
-	{ &o9fs_vnodeop_p, o9fs_vnodeop_entries };
 
+struct vops o9fs_vops = {
+	.vop_lock = vop_generic_lock,
+	.vop_unlock = vop_generic_unlock,
+	.vop_islocked = vop_generic_islocked,
+	.vop_abortop = vop_generic_abortop,
+	.vop_access = o9fs_access,
+	.vop_advlock = eopnotsupp,
+	.vop_bmap = eopnotsupp,
+	.vop_bwrite = eopnotsupp,
+	.vop_close = o9fs_close,
+	.vop_create = eopnotsupp,
+	.vop_fsync = nullop,
+	.vop_getattr = o9fs_getattr,
+	.vop_inactive = o9fs_inactive,
+	.vop_ioctl = (int (*)(void *))enoioctl,
+	.vop_link = eopnotsupp,
+	.vop_lookup = o9fs_lookup,
+	.vop_mknod = eopnotsupp, 
+	.vop_open = o9fs_open,
+	.vop_pathconf = eopnotsupp,
+	.vop_poll = eopnotsupp,
+	.vop_print = eopnotsupp,
+	.vop_read = o9fs_read,
+	.vop_readdir = o9fs_readdir,
+	.vop_readlink = eopnotsupp,
+	.vop_reallocblks = eopnotsupp,
+	.vop_reclaim = o9fs_reclaim,
+	.vop_remove = eopnotsupp,
+	.vop_rename = eopnotsupp,
+	.vop_revoke = vop_generic_revoke,
+	.vop_mkdir = eopnotsupp,
+	.vop_rmdir = eopnotsupp,
+	.vop_setattr = eopnotsupp,
+	.vop_strategy = eopnotsupp,
+	.vop_symlink = eopnotsupp,
+	.vop_write = o9fs_write,
+	.vop_kqfilter = eopnotsupp,
+};
+	
+	
 int 
 o9fs_open(void *v)
 {
