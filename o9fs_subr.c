@@ -254,10 +254,9 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 		return error;
 	}
 
-	if (f->qid.type == O9FS_QTDIR){
-		DBG("o9fs_fid2vnode: isdir\n");
+	if (f->qid.type == O9FS_QTDIR)
 		vp->v_type = VDIR;
-	} else
+	else
 		vp->v_type = VREG;
 
 	vp->v_data = f;

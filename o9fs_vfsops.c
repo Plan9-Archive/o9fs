@@ -216,20 +216,19 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 
 	p = curproc;
 	fs = VFSTOO9FS(mp);
-	DBG("fs %p\n", fs);
-	DBG("fs->vroot %p %d\n", fs->vroot, VTO92(fs->vroot)->fid);
 
 	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
 	if (f == NULL) {
 		DRET();
 		return -1;
 	}
-	DBG("cloned root\n");
+	DBG("cloned root to %d\n", f->fid);
 
 	if (error = o9fs_allocvp(fs->mp, f, &vp, VROOT)) {
 		DRET();
 		return error;
 	}
+	vp->v_data = f;
 	vp->v_flag = VROOT;
 	vp->v_type = VDIR;
 	*vpp = vp; 

@@ -459,6 +459,8 @@ o9fs_lookup(void *v)
 	struct o9fs *fs;
 	struct o9fid *f, *parf;
 	int flags, op, islast, error;
+	long n;
+	char *path;
 	
 	DIN();
 	ap = v;
@@ -474,6 +476,8 @@ o9fs_lookup(void *v)
 	parf = VTO92(dvp);			/* parent fid */
 	error = 0;
 	*vpp = NULL;
+
+	DBG("parent (%p) fid %d\n", parf, parf->fid);
 	
 	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
 		DBG("dot\n");
@@ -483,9 +487,11 @@ o9fs_lookup(void *v)
 		return 0;
 	}
 
-	DBG("name is %s\n", cnp->cn_nameptr);
+	path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
+	strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
 
-	f = o9fs_walk(fs, parf, o9fs_xgetfid(fs), cnp->cn_nameptr);
+	/* todo: watch for fid leakage */
+	f = o9fs_walk(fs, parf, o9fs_xgetfid(fs), path);
 	if (f == NULL) {
 		DBG("%s not found\n", cnp->cn_nameptr);
 		if (islast && (op == CREATE || op == RENAME)) {
@@ -621,8 +627,8 @@ int
 o9fs_inactive(void *v)
 {
 	struct vop_inactive_args *ap;
-	DBG("inactive: enter\n");
-	DBG("inactive: return\n");
+	DIN();
+	DRET();
 	return 0;
 }
 

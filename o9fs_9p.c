@@ -17,7 +17,7 @@ o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 {
 	struct o9fsfcall tx, rx;
 
-	DBG("fidclunk: enter\n");
+	DIN();
 	tx.type = O9FS_TCLUNK;
 	tx.fid = f->fid;
 	o9fs_rpc(fs, &tx, &rx);
@@ -25,7 +25,7 @@ o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 	f->opened = 0;
 	f->mode = -1;
 	o9fs_putfid(fs, f);
-	DBG("fidclunk: return\n");
+	DRET();
 }
 
 struct o9fid *
@@ -33,7 +33,8 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 {
 	long n;
 	u_char *p;
-	int nwname;
+	int nwname, nwqid;
+	struct o9fsqid *nqid;
 	DIN();
 
 	if (fid == NULL) {
@@ -54,21 +55,17 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 		newfid->offset = fid->offset;
 		nwname = 0;
 		p += Minhd + 4 + 4 + 2;		/* Advance after nwname, which will be filled later */
-	} else {
-		if (name == NULL) {
-			printf("o9fs_walk: cloning with empty name\n");
-			DRET();
-			return NULL;
-		}
-		p = putstring(p + Minhd + 4 + 4 + 2, name);
+	}
+
+	if (name != NULL) {
+		p = putstring(fs->outbuf + Minhd + 4 + 4 + 2, name);
 		nwname = 1;
 	}
+
 	O9FS_PBIT32(fs->outbuf + Minhd + 4, newfid->fid);
-	o9fs_dump(fs->outbuf, p - fs->outbuf);
 	O9FS_PBIT16(fs->outbuf + Minhd + 4 + 4, nwname);
 
 	n = p - fs->outbuf;
-	o9fs_dump(fs->outbuf, n);
 	O9FS_PBIT32(fs->outbuf, n);
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
@@ -76,8 +73,19 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 		DRET();
 		return NULL;
 	}
+
+	nwqid = O9FS_GBIT16(fs->inbuf + Minhd);
+	if (nwqid < nwname) {
+		printf("nwqid < nwname\n");
+		return NULL;
+	}
+
+	newfid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2);
+	newfid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 1);
+	newfid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 1 + 4);
+
 	DRET();
-	return fid;
+	return newfid;
 }
 
 struct o9fsfid*
