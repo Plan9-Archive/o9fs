@@ -5,6 +5,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 u_char*
 gstring(u_char *p, u_char *ep, char **s)
 {

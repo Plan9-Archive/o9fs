@@ -1,14 +1,19 @@
-#ifdef DEBUG
-#define DPRINT printf
-#else
-#define DPRINT 
-#endif
+#define DBG(x...) do{\
+	if(Debug){\
+		printf("%s: ", __FUNCTION__);\
+		printf(x);\
+	}\
+}while(0)
+
+#define DIN() DBG(">>>\n")
+#define DRET() DBG("<<<\n")
+
 #define nelem(a) (sizeof(a) / sizeof(*a))
 
 struct o9fsqid {
-	uint64_t	path;
-	uint32_t	vers;
 	uint8_t		type;
+	uint32_t	vers;
+	uint64_t	path;
 };
 
 struct o9fsstat {
@@ -38,9 +43,18 @@ struct o9fsfid {
 	struct	o9fsfid *next;
 };
 
+struct o9fid {
+	int		fid;
+	int		mode;
+	struct	o9fsqid	qid;
+	int64_t	offset;
+	TAILQ_ENTRY(o9fid) next;
+};
 
 #define VTO9(vp) ((struct o9fsfid *)(vp)->v_data)
+#define VTO92(vp) ((struct o9fid *)(vp)->v_data)
 #define VFSTOO9FS(mp) ((struct o9fs *)((mp)->mnt_data))
+
 
 #define	O9FS_VERSION9P	"9P2000"
 #define	O9FS_MAXWELEM	16
@@ -105,8 +119,10 @@ struct o9fs {
 	u_char	*inbuf;
 	u_char	*outbuf;
 
+	TAILQ_HEAD(, o9fid)	activeq;
+	TAILQ_HEAD(, o9fid) freeq;
 	int	nextfid;
-	struct	o9fsfid *rootfid;
+
 	struct	o9fsfid *freefid;
 };
 
@@ -132,11 +148,11 @@ struct o9fs {
 #define O9FS_GBIT64(p)	((uint32_t)((p)[0]|((p)[1]<<8)|((p)[2]<<16)|((p)[3]<<24)) |\
 						((uint64_t)((p)[4]|((p)[5]<<8)|((p)[6]<<16)|((p)[7]<<24)) << 32))
  
-#define O9FS_PBIT8(p,v)		((qaddr_t)(p))[0]=(v)
-#define O9FS_PBIT16(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8   
-#define O9FS_PBIT32(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8;((qaddr_t)(p))[2]=(v)>>16;((qaddr_t)(p))[3]=(v)>>24
-#define O9FS_PBIT64(p,v)	((qaddr_t)(p))[0]=(v);((qaddr_t)(p))[1]=(v)>>8;((qaddr_t)(p))[2]=(v)>>16;((qaddr_t)(p))[3]=(v)>>24;\
-							((qaddr_t)(p))[4]=(v)>>32;((qaddr_t)(p))[5]=(v)>>40;((qaddr_t)(p))[6]=(v)>>48;((qaddr_t)(p))[7]=(v)>>56
+#define O9FS_PBIT8(p,v)		(p)[0]=(v)
+#define O9FS_PBIT16(p,v)	(p)[0]=(v);(p)[1]=(v)>>8   
+#define O9FS_PBIT32(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24
+#define O9FS_PBIT64(p,v)	(p)[0]=(v);(p)[1]=(v)>>8;(p)[2]=(v)>>16;(p)[3]=(v)>>24;\
+							(p)[4]=(v)>>32;(p)[5]=(v)>>40;(p)[6]=(v)>>48;(p)[7]=(v)>>56
 
 #define O9FS_BIT8SZ		1
 #define O9FS_BIT16SZ	2

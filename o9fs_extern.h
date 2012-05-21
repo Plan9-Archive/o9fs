@@ -1,8 +1,12 @@
 /* o9fs_subr.c */
-int		o9fs_allocvp(struct mount *, struct o9fsfid *, struct vnode **, u_long);
+void	o9fs_dump(u_char *, long);
+char	*putstring(char *, char *);
+int		o9fs_allocvp(struct mount *, struct o9fid *, struct vnode **, u_long);
 void	o9fs_freevp(struct vnode *);
 u_int	o9fs_tokenize(char **, u_int, char *, char);
 struct	o9fsfid *o9fs_getfid(struct o9fs *);
+struct	o9fid *o9fs_xgetfid(struct o9fs *);
+void	o9fs_xputfid(struct o9fs *, struct o9fid *);
 void	o9fs_putfid(struct o9fs *, struct o9fsfid *);
 int		o9fs_ptoumode(int);
 int		o9fs_utopmode(int);
@@ -21,6 +25,7 @@ long	o9fs_rdwr(struct o9fs *, int, struct o9fsfid *, void *, u_long, int64_t);
 void	o9fs_fidclunk(struct o9fs *, struct o9fsfid *);
 struct	o9fsfid *o9fs_twalk(struct o9fs *, struct o9fsfid *, struct o9fsfid *, char *);
 int		o9fs_opencreate(int, struct o9fs *, struct o9fsfid *, int, ulong, char *);
+struct	o9fid *o9fs_walk(struct o9fs *, struct o9fid *, struct o9fid *, char *);
 
 /* o9fs_conv* */
 u_char	*pstring(u_char *, char *);
@@ -41,4 +46,4 @@ u_int	o9fs_convM2D(u_char *, u_int, struct o9fsstat *, char *);
 int		o9fs_rpc(struct o9fs *, struct o9fsfcall *, struct o9fsfcall *);
 long	o9fs_mio(struct o9fs *, u_long);
 
-extern int (**o9fs_vnodeop_p)(void *);
+extern struct vops o9fs_vops;

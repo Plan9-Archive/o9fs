@@ -5,6 +5,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 u_char*
 pstring(u_char *p, char *s)
 {

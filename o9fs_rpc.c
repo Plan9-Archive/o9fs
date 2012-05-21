@@ -9,6 +9,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 static long
 rdwr(struct o9fs *fs, void *buf, long count, off_t *offset, int write)
 {
@@ -136,7 +140,7 @@ o9fs_rpc(struct o9fs *fs, struct o9fsfcall *tx, struct o9fsfcall *rx)
 	}
 
 	if (rx->type == O9FS_RERROR) {
-		DPRINT("%s\n", rx->ename);
+		DBG("%s\n", rx->ename);
 		return -1;
 	}
 	return error;

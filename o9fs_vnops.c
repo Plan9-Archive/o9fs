@@ -19,6 +19,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 static void *o9fsrealloc(void *, size_t, size_t);
 
 int o9fs_open(void *);
@@ -87,7 +91,7 @@ o9fs_open(void *v)
 	struct o9fsfid *f;
 	int error, mode;
 
-	DPRINT("open: enter\n");
+	DBG("open: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
@@ -96,7 +100,7 @@ o9fs_open(void *v)
 	f = VTO9(vp);
 
 	if (f->opened == 1) {
-		DPRINT("open: already opened\n");
+		DBG("open: already opened\n");
 		goto out;
 	}
 	
@@ -115,7 +119,7 @@ o9fs_open(void *v)
 		vp->v_type = VREG;
 
 out:
-	DPRINT("open: return (%p)->v_type=%d\n", vp, vp->v_type);
+	DBG("open: return (%p)->v_type=%d\n", vp, vp->v_type);
 	return 0;
 }
 
@@ -127,23 +131,23 @@ o9fs_close(void *v)
 	struct o9fsfid *f;
 	struct o9fs *fs;
 	
-	DPRINT("close: enter\n");
+	DBG("close: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	f = VTO9(vp);
 
 	if (f == NULL) {
-		DPRINT("close: nil fid\n");
-		DPRINT("close: return\n");
+		DBG("close: nil fid\n");
+		DBG("close: return\n");
 		return 0;
 	}
 
-	DPRINT("close: fid=%d\n", f->fid);
+	DBG("close: fid=%d\n", f->fid);
 	fs = VFSTOO9FS(vp->v_mount);
 
 	o9fs_fidclunk(fs, f);
 	vp->v_data = NULL;
-	DPRINT("close: return\n");
+	DBG("close: return\n");
 	return 0;
 }
 
@@ -336,7 +340,7 @@ o9fs_readdir(void *v)
 	int error, *eofflag, i, msize;
 	int64_t len;
 
-	DPRINT("readdir: enter\n");
+	DBG("readdir: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
@@ -371,7 +375,7 @@ o9fs_readdir(void *v)
 	free(buf, M_O9FS);
 
 	if (ts == 0 && n < 0) {
-		DPRINT("readdir: return\n");
+		DBG("readdir: return\n");
 		return -1;
 	}
 	for (i = 0; i < ts; i++) {
@@ -384,11 +388,11 @@ o9fs_readdir(void *v)
 		error = uiomove(&d, d.d_reclen, uio);
 		if (error) {
 			printf("readdir: uiomove error\n");
-			DPRINT("readdir: return\n");
+			DBG("readdir: return\n");
 			return -1;
 		}
 	}
-	DPRINT("readdir: return\n");
+	DBG("readdir: return\n");
 	return 0;
 }
 
@@ -405,7 +409,7 @@ o9fs_write(void *v)
 	int64_t len;
 	off_t offset;
 
-	DPRINT("write: enter\n");
+	DBG("write: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
@@ -413,10 +417,10 @@ o9fs_write(void *v)
 	f = VTO9(vp);
 	error = n = 0;
 
-	DPRINT("write: vp=%p v_type=%d\n", vp, vp->v_type); 
+	DBG("write: vp=%p v_type=%d\n", vp, vp->v_type); 
 
 	if (uio->uio_offset < 0 || vp->v_type != VREG) {
-		DPRINT("write: return EINVAL\n");
+		DBG("write: return EINVAL\n");
 		return EINVAL;
 	}
 
@@ -441,7 +445,7 @@ o9fs_write(void *v)
 	if (n < 0)
 		return -1;
 	free(buf, M_O9FS);
-	DPRINT("write: return\n");
+	DBG("write: return\n");
 	return error;
 }
 
@@ -450,90 +454,68 @@ o9fs_lookup(void *v)
 {
 	struct vop_lookup_args *ap;
 	struct componentname *cnp;
-	char namep[MAXPATHLEN], *path[O9FS_MAXWELEM];
-	struct vnode *dvp;
-	struct vnode **vpp;
-	struct o9fsfid *fid, *dfid;
-	struct o9fs *fs;
+	struct vnode **vpp, *dvp;
 	struct proc *p;
-	int flags, nameiop, error, islast;
-
-	DPRINT("lookup: enter\n");
+	struct o9fs *fs;
+	struct o9fid *f, *parf;
+	int flags, op, islast, error;
+	
+	DIN();
 	ap = v;
 	dvp = ap->a_dvp;			/* parent dir where to look */
 	vpp = ap->a_vpp;			/* resulting vnode */
-	cnp = ap->a_cnp;
+	cnp = ap->a_cnp;			/* path component name */
 	flags = cnp->cn_flags;		/* lookup options */
 	p = curproc;
-	nameiop = cnp->cn_nameiop;	/* lookup operation */
+	op = cnp->cn_nameiop;		/* lookup operation */
 	islast = flags & ISLASTCN;
 
-	*vpp = NULL;
-	dfid = VTO9(dvp);			/* parent dir fid */
 	fs = VFSTOO9FS(dvp->v_mount);
-
-	DPRINT("lookup: checking dot\n");
-	/* XXX correct dot/dotdot semantics */
-/*	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-		DPRINT("lookup: isdot\n");
-		if (dfid->opened){
-			o9fs_fidclunk(fs, dfid);
-			fid = dfid;
-		else {
-			fid = o9fs_twalk(fs, dfid, 0, ".");
-			if (fid == NULL)
-				goto bad;
-		}
-		error = o9fs_allocvp(fs->mp, fid, vpp, 0);
-		if (error)
-			goto bad;*/
-
-	/*	*vpp = dvp;
-		VREF(*vpp); */
-	//	DPRINT("lookup: return\n");
-	//	return 0;
-//	} else {
-//		DPRINT("lookup: not dot\n");
-		strlcpy(namep, cnp->cn_nameptr, cnp->cn_namelen+1);
-		o9fs_tokenize(path, nelem(path), namep, '/');
-//	}
+	parf = VTO92(dvp);			/* parent fid */
+	error = 0;
+	*vpp = NULL;
 	
-	DPRINT("lookup: walking... ");
-	if ((fid = o9fs_twalk(fs, dfid, 0, *path)) == NULL) {
-		DPRINT("not ok\n");
-		/* it is fine to fail walking when we are creating
-	 	 * or renaming on the last component of the path name
-	 	 */
-		if (islast && (nameiop == CREATE || nameiop == RENAME)) {
-			/* save the name. it's gonna be used soon */
-			cnp->cn_flags |= SAVENAME;
-			error = EJUSTRETURN;
-			DPRINT("lookup: return\n");
-			return error;
-		} else
-			/* it wasn't found at all */
-			o9fs_putfid(fs, fid);
-			goto bad;
+	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
+		DBG("dot\n");
+		vref(dvp);
+		*vpp = dvp;
+		DRET();
+		return 0;
 	}
 
-	DPRINT("ok\n");
-	error = o9fs_allocvp(fs->mp, fid, vpp, 0);
-	if (error)
-		goto bad;
+	DBG("name is %s\n", cnp->cn_nameptr);
 
+	f = o9fs_walk(fs, parf, o9fs_xgetfid(fs), cnp->cn_nameptr);
+	if (f == NULL) {
+		DBG("%s not found\n", cnp->cn_nameptr);
+		if (islast && (op == CREATE || op == RENAME)) {
+			/* save the name. it's gonna be used soon */
+			cnp->cn_flags |= SAVENAME;
+			DRET();
+			return EJUSTRETURN;
+		}
+		*vpp = NULL;
+		DRET();
+		return ENOENT;
+	}
+	
+	error = o9fs_allocvp(fs->mp, f, vpp, 0);
+	if (error) {
+		*vpp = NULL;
+		DRET();
+		return ENOENT;
+	}
+	
 	/* fix locking on parent dir */
 	if (islast && !(cnp->cn_flags & LOCKPARENT)) {
 		VOP_UNLOCK(dvp, 0, p);
 		flags |= PDIRUNLOCK;
 	}
-	DPRINT("lookup: return\n");
-	return error;
+	
+	DRET();
+	return 0;
+}
 
-bad:
-	*vpp = NULL;
-	DPRINT("lookup: return\n");
-	return ENOENT;
-}	
 
 
 int
@@ -542,36 +524,39 @@ o9fs_getattr(void *v)
 	struct vop_getattr_args *ap;
 	struct vnode *vp;
 	struct vattr *vap;
-	struct o9fsfid *f;
+	struct o9fid *f;
 	struct o9fsstat *stat;
 	struct o9fs *fs;
 
-	DPRINT("getattr: enter\n");
+	DBG("getattr: enter\n");
+
 	ap = v;
 	vp = ap->a_vp;
 	vap = ap->a_vap;
-	f = VTO9(vp);
+	f = VTO92(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 
-	if (!f)
+	if (f == NULL)
 		return 0;
-	stat = o9fs_fstat(fs, f);
+
+/*	stat = o9fs_fstat(fs, f);
 	if (stat == NULL) {
-		DPRINT("getattr: Tstat failed\n");
-		DPRINT("getattr: return\n");
+		DBG("getattr: Tstat failed\n");
+		DBG("getattr: return\n");
 		return -1;
 	}
+*/
 
 	bzero(vap, sizeof(*vap));
 	vattr_null(vap);
 	vap->va_uid = 0;
 	vap->va_gid = 0;
 	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
-	vap->va_size = stat->length;
+	vap->va_size = 512; //stat->length;
 	vap->va_blocksize = VFSTOO9FS(vp->v_mount)->msize;
-	vap->va_atime.tv_sec = stat->atime;
-	vap->va_mtime.tv_sec = stat->mtime;
-	vap->va_ctime.tv_sec = stat->atime;
+	vap->va_atime.tv_sec = 0; //stat->atime;
+	vap->va_mtime.tv_sec = 0; // stat->mtime;
+	vap->va_ctime.tv_sec = 0; //stat->atime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
@@ -580,15 +565,23 @@ o9fs_getattr(void *v)
 		vap->va_type = VDIR;
 		vap->va_fileid = 2;
 	}
+
+	/*
+	 * vap->va_type being VDIR does not guarantee that user applications
+	 * will see us as a dir, we have to set the mode explicitly.
+	 */
 	vap->va_type = vp->v_type;
-	vap->va_mode = o9fs_ptoumode(stat->mode);
+	vap->va_mode = 0777; //o9fs_ptoumode(stat->mode);
+	if(vap->va_type == VDIR)
+		vap->va_mode |= S_IFDIR;
+
 	vap->va_nlink = 0;
 	vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
 	vap->va_filerev = f->qid.vers;
 
-	o9fs_freestat(stat);
-	free(stat, M_O9FS);
-	DPRINT("getattr: return\n");
+//	o9fs_freestat(stat);
+//	free(stat, M_O9FS);
+	DBG("getattr: return\n");
 	return 0;
 }
 
@@ -628,8 +621,8 @@ int
 o9fs_inactive(void *v)
 {
 	struct vop_inactive_args *ap;
-	DPRINT("inactive: enter\n");
-	DPRINT("inactive: return\n");
+	DBG("inactive: enter\n");
+	DBG("inactive: return\n");
 	return 0;
 }
 
@@ -642,18 +635,18 @@ o9fs_reclaim(void *v)
 	struct o9fsfid *f;
 	struct o9fs *fs;
 
-	DPRINT("reclaim: enter\n");
+	DBG("reclaim: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	f = VTO9(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 
 	cache_purge(vp);
-	DPRINT("reclaiming fid %d\n", f->fid);
+	DBG("reclaiming fid %d\n", f->fid);
 	if(f)
 		o9fs_fidclunk(fs, f);
 	o9fs_freevp(vp);
 
-	DPRINT("reclaim: return\n");
+	DBG("reclaim: return\n");
 	return 0;
 }

@@ -9,6 +9,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 extern struct vnodeopv_desc o9fs_vnodeop_opv_desc;
 extern struct vfsops o9fs_vfsops;
 

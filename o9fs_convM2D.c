@@ -5,6 +5,10 @@
 #include "o9fs.h"
 #include "o9fs_extern.h"
 
+enum{
+	Debug = 1,
+};
+
 int
 o9fs_statcheck(u_char *buf, u_int nbuf)
 {

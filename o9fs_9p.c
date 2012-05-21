@@ -3,16 +3,21 @@
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/namei.h>
+#include <sys/queue.h>
 
 #include "o9fs.h"
 #include "o9fs_extern.h"
+
+enum{
+	Debug = 1,
+};
 
 void
 o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 {
 	struct o9fsfcall tx, rx;
 
-	DPRINT("fidclunk: enter\n");
+	DBG("fidclunk: enter\n");
 	tx.type = O9FS_TCLUNK;
 	tx.fid = f->fid;
 	o9fs_rpc(fs, &tx, &rx);
@@ -20,7 +25,59 @@ o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
 	f->opened = 0;
 	f->mode = -1;
 	o9fs_putfid(fs, f);
-	DPRINT("fidclunk: return\n");
+	DBG("fidclunk: return\n");
+}
+
+struct o9fid *
+o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
+{
+	long n;
+	u_char *p;
+	int nwname;
+	DIN();
+
+	if (fid == NULL) {
+		DRET();
+		return NULL;
+	}
+
+	p = fs->outbuf;
+	O9FS_PBIT8(p + Offtype, O9FS_TWALK);
+	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT32(p + Minhd, fid->fid);
+
+	if (newfid == NULL) {
+		printf("cloning fid %d\n", fid->fid);
+		newfid = o9fs_xgetfid(fs);
+		newfid->mode = fid->mode;
+		newfid->qid = fid->qid;
+		newfid->offset = fid->offset;
+		nwname = 0;
+		p += Minhd + 4 + 4 + 2;		/* Advance after nwname, which will be filled later */
+	} else {
+		if (name == NULL) {
+			printf("o9fs_walk: cloning with empty name\n");
+			DRET();
+			return NULL;
+		}
+		p = putstring(p + Minhd + 4 + 4 + 2, name);
+		nwname = 1;
+	}
+	O9FS_PBIT32(fs->outbuf + Minhd + 4, newfid->fid);
+	o9fs_dump(fs->outbuf, p - fs->outbuf);
+	O9FS_PBIT16(fs->outbuf + Minhd + 4 + 4, nwname);
+
+	n = p - fs->outbuf;
+	o9fs_dump(fs->outbuf, n);
+	O9FS_PBIT32(fs->outbuf, n);
+	n = o9fs_mio(fs, n);
+	if (n <= 0) {
+		o9fs_xputfid(fs, newfid);
+		DRET();
+		return NULL;
+	}
+	DRET();
+	return fid;
 }
 
 struct o9fsfid*
@@ -32,7 +89,7 @@ o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, struct o9fsfid *nf, char *oname)
 
 	name = oname;
 	if (nf == NULL) {
-		DPRINT("twalk: cloning fid=%d\n", f->fid);
+		DBG("twalk: cloning fid=%d\n", f->fid);
 		nf = o9fs_fidclone(fs, f);
 		n = 0;
 	}
