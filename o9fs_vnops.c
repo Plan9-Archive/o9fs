@@ -88,28 +88,22 @@ o9fs_open(void *v)
 	struct vnode *vp;
 	struct proc *p;
 	struct o9fs *fs;
-	struct o9fsfid *f;
+	struct o9fid *f;
 	int error, mode;
 
-	DBG("open: enter\n");
+	DIN();
 	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
 	mode = o9fs_uflags2omode(ap->a_mode);
 	fs = VFSTOO9FS(vp->v_mount);
-	f = VTO9(vp);
+	f = VTO92(vp);
 
-	if (f->opened == 1) {
-		DBG("open: already opened\n");
-		goto out;
+	if (o9fs_opencreate2(fs, f, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
+		DBG("failed\n");
+		DRET();
+		return -1;
 	}
-	
-	f = o9fs_clone(fs, f);
-	if (f == NULL)
-		return -1;
-	
-	if(o9fs_opencreate(O9FS_TOPEN, fs, f, ap->a_mode, 0, 0))
-		return -1;
 
 	vp->v_data = f; /* walk has set other properties */
 
@@ -119,7 +113,7 @@ o9fs_open(void *v)
 		vp->v_type = VREG;
 
 out:
-	DBG("open: return (%p)->v_type=%d\n", vp, vp->v_type);
+	DRET();
 	return 0;
 }
 
@@ -128,26 +122,23 @@ o9fs_close(void *v)
 {
 	struct vop_close_args *ap;
 	struct vnode *vp;
-	struct o9fsfid *f;
+	struct o9fid *f;
 	struct o9fs *fs;
-	
-	DBG("close: enter\n");
+	DIN();
+
 	ap = v;
 	vp = ap->a_vp;
-	f = VTO9(vp);
+	f = VTO92(vp);
 
 	if (f == NULL) {
-		DBG("close: nil fid\n");
-		DBG("close: return\n");
+		DBG("nil fid\n");
+		DRET();
 		return 0;
 	}
 
-	DBG("close: fid=%d\n", f->fid);
 	fs = VFSTOO9FS(vp->v_mount);
-
-	o9fs_fidclunk(fs, f);
-	vp->v_data = NULL;
-	DBG("close: return\n");
+//	o9fs_clunk(fs, f);
+	DRET();
 	return 0;
 }
 
@@ -193,7 +184,7 @@ o9fs_create(void *v)
 		return -1;
 
 
-	f = o9fs_clone(fs, dirfid);
+//	f = o9fs_clone(fs, dirfid);
 	if (f == NULL)
 		goto out;
 
@@ -202,7 +193,7 @@ o9fs_create(void *v)
 
 	error = o9fs_allocvp(dvp->v_mount, f, vpp, 0);
 	if (error) {
-		o9fs_freevp(*vpp);
+		//o9fs_freevp(*vpp);
 		goto out;
 	}
 
@@ -210,7 +201,6 @@ o9fs_create(void *v)
 		(*vpp)->v_type = VDIR;
 	else
 		(*vpp)->v_type = VREG;
-	o9fs_fidclunk(fs, dirfid);
 out:
 	vput(dvp);
 	return error;
@@ -457,7 +447,7 @@ o9fs_lookup(void *v)
 	struct vnode **vpp, *dvp;
 	struct proc *p;
 	struct o9fs *fs;
-	struct o9fid *f, *parf;
+	struct o9fid *f, *parf, *nf;
 	int flags, op, islast, error;
 	long n;
 	char *path;
@@ -477,21 +467,22 @@ o9fs_lookup(void *v)
 	error = 0;
 	*vpp = NULL;
 
-	DBG("parent (%p) fid %d\n", parf, parf->fid);
-	
+	path = NULL;
 	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-		DBG("dot\n");
+	/*	DBG("dot\n");
 		vref(dvp);
 		*vpp = dvp;
 		DRET();
-		return 0;
+		return 0; */
+		nf = NULL;
+	} else {
+		path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
+		strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
+		nf = o9fs_xgetfid(fs);
 	}
 
-	path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
-	strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
-
-	/* todo: watch for fid leakage */
-	f = o9fs_walk(fs, parf, o9fs_xgetfid(fs), path);
+	/* todo: watch for fid and path leakage */
+	f = o9fs_walk(fs, parf, nf, path);
 	if (f == NULL) {
 		DBG("%s not found\n", cnp->cn_nameptr);
 		if (islast && (op == CREATE || op == RENAME)) {
@@ -508,6 +499,7 @@ o9fs_lookup(void *v)
 	error = o9fs_allocvp(fs->mp, f, vpp, 0);
 	if (error) {
 		*vpp = NULL;
+		DBG("could not alloc vnode\n");
 		DRET();
 		return ENOENT;
 	}
@@ -533,8 +525,7 @@ o9fs_getattr(void *v)
 	struct o9fid *f;
 	struct o9fsstat *stat;
 	struct o9fs *fs;
-
-	DBG("getattr: enter\n");
+	DIN();
 
 	ap = v;
 	vp = ap->a_vp;
@@ -542,52 +533,39 @@ o9fs_getattr(void *v)
 	f = VTO92(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 
-	if (f == NULL)
+	if (f == NULL) {
+		DRET();
 		return 0;
-
-/*	stat = o9fs_fstat(fs, f);
-	if (stat == NULL) {
-		DBG("getattr: Tstat failed\n");
-		DBG("getattr: return\n");
-		return -1;
 	}
-*/
 
+	stat = o9fs_stat(fs, f);
+	if (stat == NULL) {
+		DRET();
+		return 0;
+	}
+	
 	bzero(vap, sizeof(*vap));
 	vattr_null(vap);
 	vap->va_uid = 0;
 	vap->va_gid = 0;
 	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
-	vap->va_size = 512; //stat->length;
+	vap->va_size = stat->length;
 	vap->va_blocksize = VFSTOO9FS(vp->v_mount)->msize;
-	vap->va_atime.tv_sec = 0; //stat->atime;
-	vap->va_mtime.tv_sec = 0; // stat->mtime;
-	vap->va_ctime.tv_sec = 0; //stat->atime;
+	vap->va_atime.tv_sec = stat->atime;
+	vap->va_mtime.tv_sec = stat->mtime;
+	vap->va_ctime.tv_sec = stat->atime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
 	vap->va_bytes = 0;
-	if (vp->v_flag & VROOT) {
-		vap->va_type = VDIR;
-		vap->va_fileid = 2;
-	}
-
-	/*
-	 * vap->va_type being VDIR does not guarantee that user applications
-	 * will see us as a dir, we have to set the mode explicitly.
-	 */
 	vap->va_type = vp->v_type;
-	vap->va_mode = 0777; //o9fs_ptoumode(stat->mode);
-	if(vap->va_type == VDIR)
-		vap->va_mode |= S_IFDIR;
-
+	vap->va_mode = o9fs_ptoumode(stat->mode);
 	vap->va_nlink = 0;
-	vap->va_fileid = f->qid.path; /* path is bigger. truncate? */
+	vap->va_fileid = f->qid.path;	/* qid.path is 64bit, va_fileid 32bit */
 	vap->va_filerev = f->qid.vers;
 
-//	o9fs_freestat(stat);
-//	free(stat, M_O9FS);
-	DBG("getattr: return\n");
+	free(stat, M_O9FS);
+	DRET();
 	return 0;
 }
 
@@ -627,7 +605,19 @@ int
 o9fs_inactive(void *v)
 {
 	struct vop_inactive_args *ap;
+	struct o9fid *f;
 	DIN();
+
+	ap = v;
+	VOP_UNLOCK(ap->a_vp, 0, ap->a_p);
+	f = VTO92(ap->a_vp);
+	f->ref--;
+	printvp(ap->a_vp);
+
+	/* TODO: is this an appropriate approach? */
+	if (f->ref == 0)
+		o9fs_clunk(VFSTOO9FS(ap->a_vp->v_mount), f);
+	
 	DRET();
 	return 0;
 }
@@ -638,21 +628,11 @@ o9fs_reclaim(void *v)
 {
 	struct vop_reclaim_args *ap;
 	struct vnode *vp;
-	struct o9fsfid *f;
-	struct o9fs *fs;
-
-	DBG("reclaim: enter\n");
+	DIN();
+	
 	ap = v;
 	vp = ap->a_vp;
-	f = VTO9(vp);
-	fs = VFSTOO9FS(vp->v_mount);
 
-	cache_purge(vp);
-	DBG("reclaiming fid %d\n", f->fid);
-	if(f)
-		o9fs_fidclunk(fs, f);
-	o9fs_freevp(vp);
-
-	DBG("reclaim: return\n");
+	DRET();
 	return 0;
 }

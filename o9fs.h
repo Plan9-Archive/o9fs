@@ -17,19 +17,17 @@ struct o9fsqid {
 };
 
 struct o9fsstat {
-	/* system-modified data */
-	u_short	type;	/* server type */
-	u_int	dev;	/* server subtype */
-	/* file data */
-	struct	o9fsqid qid;	/* unique id from server */
+	uint16_t	type;			/* server type */
+	uint32_t	dev;			/* server subtype */
+	struct		o9fsqid qid;	/* unique id from server */
 	uint32_t	mode;			/* permissions */
 	uint32_t	atime;			/* last read time */
 	uint32_t	mtime;			/* last write time */
-	int64_t	length;			/* file length */	
-	char	*name;			/* last element of path */
-	char	*uid;			/* owner name */
-	char	*gid;			/* group name */
-	char	*muid;			/* last modifier name */
+	uint64_t	length;			/* file length */	
+	char		*name;			/* last element of path */
+	char		*uid;			/* owner name */
+	char		*gid;			/* group name */
+	char		*muid;			/* last modifier name */
 };
 
 /* 9p file */
@@ -43,9 +41,14 @@ struct o9fsfid {
 	struct	o9fsfid *next;
 };
 
+/*
+ * Many vnodes can refer to the same o9fid and this is accounted for in ref.
+ * When ref drops to zero, the o9fid is clunked.
+ */
 struct o9fid {
 	int		fid;
-	int		mode;
+	int		mode;			/* open mode */
+	int		ref;			
 	struct	o9fsqid	qid;
 	int64_t	offset;
 	TAILQ_ENTRY(o9fid) next;

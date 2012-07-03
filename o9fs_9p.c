@@ -13,18 +13,20 @@ enum{
 };
 
 void
-o9fs_fidclunk(struct o9fs *fs, struct o9fsfid *f)
+o9fs_clunk(struct o9fs *fs, struct o9fid *f)
 {
-	struct o9fsfcall tx, rx;
-
 	DIN();
-	tx.type = O9FS_TCLUNK;
-	tx.fid = f->fid;
-	o9fs_rpc(fs, &tx, &rx);
 
-	f->opened = 0;
-	f->mode = -1;
-	o9fs_putfid(fs, f);
+	if (f == NULL)
+		panic("o9fs_clunk: nil fid");
+
+	O9FS_PBIT32(fs->outbuf, 11);
+	O9FS_PBIT8(fs->outbuf + Offtype, O9FS_TCLUNK);
+	O9FS_PBIT16(fs->outbuf + Offtag, 0);
+	O9FS_PBIT32(fs->outbuf + Minhd, f->fid);
+	
+	o9fs_mio(fs, 11);
+	o9fs_xputfid(fs, f);
 	DRET();
 }
 
@@ -80,58 +82,57 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 		return NULL;
 	}
 
-	newfid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2);
-	newfid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 1);
-	newfid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 1 + 4);
+	if (nwname > 0) {
+		newfid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2);
+		newfid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 1);
+		newfid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 1 + 4);
+	}
 
 	DRET();
 	return newfid;
 }
 
-struct o9fsfid*
-o9fs_twalk(struct o9fs *fs, struct o9fsfid *f, struct o9fsfid *nf, char *oname)
+struct o9fsstat *
+o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 {
-	struct o9fsfcall tx, rx;
-	int n;
-	char *name;
+	long n, nstat;
+	struct o9fsstat *stat;
+	DIN();
 
-	name = oname;
-	if (nf == NULL) {
-		DBG("twalk: cloning fid=%d\n", f->fid);
-		nf = o9fs_fidclone(fs, f);
-		n = 0;
-	}
-	
-	if (name) {
-		uint64_t len;
-		len = strlen(name);
-		tx.wname[0] = malloc(len, M_O9FS, M_WAITOK);
-		memcpy(tx.wname[0], name, len);
-		tx.wname[0][len] = 0;
-		n = 1;
-	}
-	tx.type = O9FS_TWALK;
-	tx.fid = f->fid;
-	tx.newfid = nf->fid;
-	tx.nwname = n;
-
-	if ((o9fs_rpc(fs, &tx, &rx)) < 0) {
-		printf("walk: rpc failed\n");
-		o9fs_putfid(fs, nf);
+	if (fid == NULL) {
+		DRET();
 		return NULL;
 	}
-	if (rx.nwqid < n) {
-		printf("walk: nwqid < n\n");
+
+	O9FS_PBIT32(fs->outbuf, Minhd + 4);
+	O9FS_PBIT8(fs->outbuf + Offtype, O9FS_TSTAT);
+	O9FS_PBIT16(fs->outbuf + Offtag, 0);
+	O9FS_PBIT32(fs->outbuf + Minhd, fid->fid);
+	n = o9fs_mio(fs, Minhd + 4);
+	if (n <= 0) {
+		DRET();
 		return NULL;
 	}
-	
-	/* no negative numbers on the qid */
-	if (rx.nwqid > 0)
-		nf->qid = rx.wqid[n-1];
-	else
-		nf->qid = rx.wqid[0];
-	return nf;
+
+	n = O9FS_GBIT16(fs->inbuf + Minhd + 2);
+	stat = malloc(n, M_O9FS, M_WAITOK);
+
+	stat->type = O9FS_GBIT16(fs->inbuf + Minhd + 2 + 2);
+	stat->dev = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2);
+	stat->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2 + 2 + 2 + 4);
+	stat->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1);
+	stat->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4);
+	stat->mode = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8);
+	stat->atime = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4);
+	stat->mtime = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4);
+	stat->length = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4);
+
+	/* For now the other fields are not used, so we don't bother parsing them */
+
+	DRET();
+	return stat;
 }
+	
 
 struct o9fsstat *
 o9fs_fstat(struct o9fs *fs, struct o9fsfid *fid)
@@ -188,6 +189,41 @@ o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf,
 	if (offset == -1)
 		f->offset += fs->reply.count;
 	return nr;
+}
+
+int
+o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
+{
+	long n;
+	u_char *p;
+	uint8_t omode;
+	DIN();
+
+	if (fid == NULL) {
+		DRET();
+		return -1;
+	}
+
+	p = fs->outbuf;
+	O9FS_PBIT8(p + Offtype, type);
+	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT32(p + Minhd, fid->fid);
+	omode = o9fs_uflags2omode(mode);
+	O9FS_PBIT8(p + Minhd + 4, omode);
+	
+	n = Minhd + 4 + 1;
+	O9FS_PBIT32(fs->outbuf, n);
+	n = o9fs_mio(fs, n);
+	if (n <= 0) {
+		DRET();
+		return -1;
+	}
+	
+	fid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2);
+	fid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 1);
+	fid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 1 + 4);
+	fid->mode = omode;
+	return 0;
 }
 
 int

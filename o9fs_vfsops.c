@@ -188,7 +188,6 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 
 	if (mounto9fs(mp, fp) != 0)
 		return EIO;
-	printf("after mounto9fs\n");
 
 	error = copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &len);
 	if (error)
@@ -199,40 +198,35 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 	if (error)
 		return error;
 	bzero(mp->mnt_stat.f_mntfromname + len, MNAMELEN - len);
-	printf("returning from mount ok\n");
 	return 0;
 }
 
 int
 o9fs_root(struct mount *mp, struct vnode **vpp)
 {
-	struct vnode *vp;
-	struct proc *p;
 	struct o9fid *f;
 	struct o9fs *fs;
 	int error;
 
 	DIN();
 
-	p = curproc;
 	fs = VFSTOO9FS(mp);
-
-	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
+/*	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
 	if (f == NULL) {
 		DRET();
 		return -1;
-	}
-	DBG("cloned root to %d\n", f->fid);
+	}  */
 
-	if (error = o9fs_allocvp(fs->mp, f, &vp, VROOT)) {
+    DBG("root fid qid.type %d\n", VTO92(fs->vroot)->qid.type);
+	error = o9fs_allocvp(mp, VTO92(fs->vroot), vpp, VROOT);
+	if (error) {
+		DBG("failed to alloc vnode\n");
 		DRET();
 		return error;
 	}
-	vp->v_data = f;
-	vp->v_flag = VROOT;
-	vp->v_type = VDIR;
-	*vpp = vp; 
+	vn_lock(*vpp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
+	DBG("cloned root to vp %p\n", *vpp); 
 	DRET();
 	return 0;
 }
@@ -248,30 +242,34 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	struct o9fid *f;
 	struct file *fp;
 	int error, flags;
-	
+	DIN();
+
 	flags = 0;
 	fs = VFSTOO9FS(mp);
 	fp = fs->servfp;
-
 	vp = fs->vroot;
 	f = VTO92(vp);
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	error = vflush(mp, vp, flags);
-	if (error)
-		return error;
-
-	vput(vp);
-//	if (f)
-//		o9fs_fidclunk(fs, f);
 	fp->f_count--;
 	FRELE(fp);
-	free(fs->rpc, M_O9FS);
-	free(fs, M_MISCFSMNT);
+
+	error = vflush(mp, NULL, flags);
+	if (error) {
+		DBG("error in vflush %d\n", error);
+		DRET();
+		return error;
+	}
+
+/*	free(fs->rpc, M_O9FS);
+	free(fs->inbuf, M_O9FS);
+	free(fs->outbuf, M_O9FS);
+	free(fs, M_MISCFSMNT); */
 	fs = mp->mnt_data = (qaddr_t)0;
 	
+	DRET();
 	return 0;
 }
 

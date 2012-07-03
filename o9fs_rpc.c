@@ -76,7 +76,7 @@ o9fs_mio(struct o9fs *fs, u_long len)
 		return n;
 
 	if (O9FS_GBIT8(fs->inbuf + Offtype) == O9FS_RERROR) {
-		printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 4);
+		printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 2);
 		return -1;
 	}
 

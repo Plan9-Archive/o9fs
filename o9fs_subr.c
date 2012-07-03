@@ -46,7 +46,7 @@ o9fs_xgetfid(struct o9fs *fs)
 {
 	struct o9fid *f;
 
-	if (fs->freefid == NULL) {
+	if (TAILQ_EMPTY(&fs->freeq)) {
 		f = (struct o9fid *) malloc(sizeof(struct o9fid), M_O9FS, M_WAITOK);
 		f->fid = fs->nextfid++;
 		TAILQ_INSERT_TAIL(&fs->activeq, f, next);
@@ -54,7 +54,8 @@ o9fs_xgetfid(struct o9fs *fs)
 		f = TAILQ_FIRST(&fs->freeq);
 		TAILQ_REMOVE(&fs->freeq, f, next);
 	}
-	
+
+	f->ref = 0;
 	f->offset = 0;
 	f->mode = -1;
 	f->qid.path = 0;
@@ -101,52 +102,6 @@ o9fs_getfid(struct o9fs *fs)
         return f;
 }
 
-void
-o9fs_putfid(struct o9fs *fs, struct o9fsfid *f)
-{        
-		DBG("putfid: enter\n");
-		if (f == NULL)
-			return;
-		f->next = fs->freefid;
-		fs->freefid = f;
-		DBG("putfid: return\n");
-}
-
-/* clone a fid, client-side */
-struct o9fsfid *
-o9fs_fidclone(struct o9fs *fs, struct o9fsfid *f)
-{
-	struct o9fsfid *nf;
-	DBG("o9fs_fidclone: enter\n");
-	if (f->opened)
-		panic("clone of open fid=%d\n", f->fid);
-	
-	nf = o9fs_getfid(fs);
-	nf->mode = f->mode;
-	nf->qid = f->qid;
-	nf->offset = f->offset;
-	DBG("o9fs_fidclone: return\n");
-	return nf;
-}
-
-/* clone a fid, server-side */
-struct o9fsfid *
-o9fs_clone(struct o9fs *fs, struct o9fsfid *f)
-{
-	return o9fs_twalk(fs, f, 0, 0);
-}
-
-/* guarantee the only copy of f */
-struct o9fsfid *
-o9fs_fidunique(struct o9fs *fs, struct o9fsfid *f)
-{
-	struct o9fsfid *nf;
-	nf = o9fs_clone(fs, f);
-	o9fs_fidclunk(fs, f);
-	f = nf;
-	return f;
-}
-
 char *
 putstring(char *buf, char *s)
 {
@@ -160,6 +115,22 @@ putstring(char *buf, char *s)
 	memcpy(buf + 2, s, n);
 	return buf + 2 + n;
 }
+
+char *
+getstring(char *buf)
+{
+	long n;
+	char *s;
+
+	if (buf == NULL)
+		panic("getstring was given a nul pointer");
+
+	n = O9FS_GBIT16(buf);
+	s = malloc(n + 1, M_O9FS, M_WAITOK);
+	memcpy(s, buf + 2, n);
+	s[n] = '\0';
+	return s;
+}	
 
 void
 o9fs_freestat(struct o9fsstat *s)
@@ -202,27 +173,6 @@ o9fs_freefcall(struct o9fsfcall *fcall)
 	p = NULL;
 }
 
-
-u_int
-o9fs_tokenize(char *res[], u_int reslen, char *str, char delim)
-{
-	char *s;
-	u_int i;
-	
-	i = 0;
-	s = str;
-
-	while (i < reslen && *s) {
-		while (*s == delim)
-			*(s++) = '\0';
-		if (*s)
-			res[i++] = s;
-		while (*s && *s != delim)
-			s++;
-	}
-	return i;
-}
-
 int
 o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 {
@@ -236,23 +186,14 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 	error = 0;
 	
 	/* Get a new vnode and associate it with our fid */
-	error = getnewvnode(VT_O9FS, mp, &o9fs_vops, &vp);
+	error = getnewvnode(VT_O9FS, mp, &o9fs_vops, vpp);
 	if (error) {
 		*vpp = NULL;
 		printf("error in getnewvnode %d\n", error);
 		DRET();
 		return error;
 	}
-
-	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-	if (error) {
-		vp->v_data = NULL;
-		vp = NULL;
-		*vpp = NULL;
-		printf("could not lock vnode, %d\n", error);
-		DRET();
-		return error;
-	}
+	vp = *vpp;
 
 	if (f->qid.type == O9FS_QTDIR)
 		vp->v_type = VDIR;
@@ -260,18 +201,11 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 		vp->v_type = VREG;
 
 	vp->v_data = f;
-	vp->v_flag = 0;
-	vp->v_flag |= flag;
-out:
-	*vpp = vp;
+	f->ref++;
+	vp->v_flag = flag;
+
 	DRET();
 	return error;
-}
-
-void
-o9fs_freevp(struct vnode *vp)
-{
-	vp->v_data = NULL;
 }
 
 int
@@ -282,7 +216,6 @@ o9fs_ptoumode(int mode)
 	umode = mode & (0777|O9FS_DMDIR);
 	if ((mode & O9FS_DMDIR) == O9FS_DMDIR)
 		umode |= S_IFDIR;
-
 	return umode;
 }
 
@@ -326,11 +259,12 @@ o9fs_uflags2omode(int uflags)
 }
 
 void
-printfidvp(struct o9fsfid *f)
+printvp(struct vnode *vp)
 {
-	if(!f)
-		return;
-	printf("f=%p f->fid=%d ", f, f->fid);
-}
+	struct o9fid *f;
 
-	
+	if (vp == NULL || VTO92(vp) == NULL)
+		return;
+	f = VTO92(vp);
+	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type);
+}
