@@ -218,10 +218,10 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 		DRET();
 		return -1;
 	}
-	
-	fid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd + 2);
-	fid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 1);
-	fid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 1 + 4);
+
+	fid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd);
+	fid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 1);
+	fid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 1 + 4);
 	fid->mode = omode;
 	return 0;
 }

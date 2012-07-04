@@ -259,12 +259,12 @@ o9fs_uflags2omode(int uflags)
 }
 
 void
-printvp(struct vnode *vp)
+_printvp(struct vnode *vp)
 {
 	struct o9fid *f;
 
 	if (vp == NULL || VTO92(vp) == NULL)
 		return;
 	f = VTO92(vp);
-	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type);
+	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type, mode);
 }

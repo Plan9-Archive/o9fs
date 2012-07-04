@@ -12,7 +12,7 @@ int		o9fs_utopmode(int);
 int		o9fs_uflags2omode(int);
 void	o9fs_freefcall(struct o9fsfcall *);
 void	o9fs_freestat(struct o9fsstat *);
-void	printvp(struct vnode *);
+void	_printvp(struct vnode *);
 
 /* o9fs_9p.c */
 struct	o9fsstat *o9fs_fstat(struct o9fs *, struct o9fsfid *);

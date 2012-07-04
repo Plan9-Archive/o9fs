@@ -99,6 +99,7 @@ o9fs_open(void *v)
 	fs = VFSTOO9FS(vp->v_mount);
 	f = VTO92(vp);
 
+	printvp(vp);
 	if (o9fs_opencreate2(fs, f, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
 		DBG("failed\n");
 		DRET();
@@ -329,18 +330,20 @@ o9fs_readdir(void *v)
 	long n, ts;
 	int error, *eofflag, i, msize;
 	int64_t len;
+	DIN();
 
-	DBG("readdir: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
 	eofflag = ap->a_eofflag;
 	fs = VFSTOO9FS(vp->v_mount);
-	f = VTO9(vp);
+	f = VTO92(vp);
 	error = i = n = 0;
 
-	if (uio->uio_resid == 0)
+	if (uio->uio_resid == 0) {
+		DRET();
 		return 0;
+	}
 
 	len = uio->uio_resid;
 	msize = fs->msize - O9FS_IOHDRSZ;
@@ -365,7 +368,7 @@ o9fs_readdir(void *v)
 	free(buf, M_O9FS);
 
 	if (ts == 0 && n < 0) {
-		DBG("readdir: return\n");
+		DRET();
 		return -1;
 	}
 	for (i = 0; i < ts; i++) {
@@ -377,12 +380,12 @@ o9fs_readdir(void *v)
 		d.d_reclen = DIRENT_SIZE(&d);
 		error = uiomove(&d, d.d_reclen, uio);
 		if (error) {
-			printf("readdir: uiomove error\n");
-			DBG("readdir: return\n");
+			DBG("uiomove error\n");
+			DRET():
 			return -1;
 		}
 	}
-	DBG("readdir: return\n");
+	DRET();
 	return 0;
 }
 

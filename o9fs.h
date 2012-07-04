@@ -8,6 +8,11 @@
 #define DIN() DBG(">>>\n")
 #define DRET() DBG("<<<\n")
 
+#define printvp(x) do{\
+	printf("%s: ", __FUNCTION__);\
+	_printvp((x));\
+}while(0)
+
 #define nelem(a) (sizeof(a) / sizeof(*a))
 
 struct o9fsqid {
