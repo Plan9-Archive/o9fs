@@ -58,6 +58,7 @@ o9fs_xgetfid(struct o9fs *fs)
 	f->ref = 0;
 	f->offset = 0;
 	f->mode = -1;
+	f->iounit = 0;
 	f->qid.path = 0;
 	f->qid.vers = 0;
 	f->qid.type = 0;
@@ -72,34 +73,6 @@ o9fs_xputfid(struct o9fs *fs, struct o9fid *f)
 
 	TAILQ_REMOVE(&fs->activeq, f, next);
 	TAILQ_INSERT_TAIL(&fs->freeq, f, next);
-}
-
-struct o9fsfid *
-o9fs_getfid(struct o9fs *fs)
-{
-        struct o9fsfid *f;
-        int i;
-        
-        if (fs->freefid == NULL) {
-				f = (struct o9fsfid *) malloc(sizeof(struct o9fsfid) * Chunk,
-                	M_O9FS, M_WAITOK);
-				for (i = 0; i < Chunk; i++) {
-						f[i].fid = fs->nextfid++;
-						f[i].next = &f[i+1];
-						f[i].opened = 0;
-               			 }
-				f[i-1].next = NULL;
-				fs->freefid = f;
-        }
-        f = fs->freefid;
-        fs->freefid = f->next;
-        f->offset = 0;
-        f->mode = -1;
-	//	f->ref = 0;
-        f->qid.path = 0;
-        f->qid.vers = 0;
-        f->qid.type = 0;
-        return f;
 }
 
 char *
@@ -185,7 +158,6 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 	p = curproc;
 	error = 0;
 	
-	/* Get a new vnode and associate it with our fid */
 	error = getnewvnode(VT_O9FS, mp, &o9fs_vops, vpp);
 	if (error) {
 		*vpp = NULL;
@@ -258,6 +230,20 @@ o9fs_uflags2omode(int uflags)
 	return omode;
 }
 
+void *
+o9fsrealloc(void *ptr, size_t oldsize, size_t newsize)
+{
+	void *p;
+	
+	if (newsize == oldsize)
+		return ptr;
+	p = malloc(newsize, M_O9FS, M_WAITOK);
+	if (ptr)
+		bcopy(ptr, p, oldsize);
+	ptr = p;
+	return p;
+}
+
 void
 _printvp(struct vnode *vp)
 {
@@ -266,5 +252,5 @@ _printvp(struct vnode *vp)
 	if (vp == NULL || VTO92(vp) == NULL)
 		return;
 	f = VTO92(vp);
-	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type, mode);
+	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d iounit %ld\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type, f->mode, f->iounit);
 }

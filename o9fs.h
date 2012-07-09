@@ -51,11 +51,13 @@ struct o9fsfid {
  * When ref drops to zero, the o9fid is clunked.
  */
 struct o9fid {
-	int		fid;
-	int		mode;			/* open mode */
-	int		ref;			
-	struct	o9fsqid	qid;
-	int64_t	offset;
+	int32_t		fid;
+	int8_t		mode;			/* open mode */
+	uint32_t	iounit;
+	struct		o9fsqid	qid;
+	uint64_t	offset;
+
+	int			ref;
 	TAILQ_ENTRY(o9fid) next;
 };
 

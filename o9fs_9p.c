@@ -50,7 +50,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	O9FS_PBIT32(p + Minhd, fid->fid);
 
 	if (newfid == NULL) {
-		printf("cloning fid %d\n", fid->fid);
+		DBG("cloning fid %d\n", fid->fid);
 		newfid = o9fs_xgetfid(fs);
 		newfid->mode = fid->mode;
 		newfid->qid = fid->qid;
@@ -79,6 +79,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	nwqid = O9FS_GBIT16(fs->inbuf + Minhd);
 	if (nwqid < nwname) {
 		printf("nwqid < nwname\n");
+		DRET();
 		return NULL;
 	}
 
@@ -191,6 +192,44 @@ o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf,
 	return nr;
 }
 
+uint32_t
+o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t off)
+{
+	u_char *p;
+	long n;
+	DIN();
+
+	if (f == NULL) {
+		DRET();
+		return -1;
+	}
+
+	p = fs->outbuf;
+	O9FS_PBIT8(p + Offtype, type);
+	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT32(p + Minhd, f->fid);
+	O9FS_PBIT64(p + Minhd + 4, off);
+	if (f->iounit > 0 && len > f->iounit)
+		len = f->iounit;
+	if (len > fs->msize)
+		len = fs->msize - O9FS_IOHDRSZ;
+	O9FS_PBIT32(p + Minhd + 4 + 8, len);
+	p += Minhd + 4 + 8 + 4;
+
+	n = p - fs->outbuf;
+	O9FS_PBIT32(fs->outbuf, n);
+	n = o9fs_mio(fs, n);
+	if (n <= 0) {
+		DRET();
+		return -1;
+	}
+
+	n = O9FS_GBIT32(fs->inbuf + Minhd);
+	DBG("read %ld bytes\n", n);
+	DRET();
+	return n;
+}
+	
 int
 o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
 {
@@ -222,6 +261,7 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 	fid->qid.type = O9FS_GBIT8(fs->inbuf + Minhd);
 	fid->qid.vers = O9FS_GBIT32(fs->inbuf + Minhd + 1);
 	fid->qid.path = O9FS_GBIT64(fs->inbuf + Minhd + 1 + 4);
+	fid->iounit = O9FS_GBIT32(fs->inbuf + Minhd + 1 + 4 + 8);
 	fid->mode = omode;
 	return 0;
 }

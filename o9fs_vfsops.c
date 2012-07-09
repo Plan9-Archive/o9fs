@@ -55,7 +55,7 @@ o9fs_version(struct o9fs *fs, uint32_t msize)
 	n = o9fs_mio(fs, 19);
 	if (n <= 0)
 		return -1;
-	return fs->msize = O9FS_GBIT16(fs->inbuf + Minhd + 4);
+	return fs->msize = O9FS_GBIT16(fs->inbuf + Minhd);
 }	
 
 struct o9fid *
@@ -154,7 +154,7 @@ mounto9fs(struct mount *mp, struct file *fp)
 	TAILQ_INIT(&fs->freeq);
 	fs->nextfid = 0;	
 
-	if(o9fs_version(fs, 8192) < 0)
+	if(o9fs_version(fs, 8192+O9FS_IOHDRSZ) < 0)
 		return EIO;
 
 	fid = o9fs_attach(fs, o9fs_auth(fs, "none", ""), "iru", "");

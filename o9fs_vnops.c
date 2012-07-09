@@ -23,8 +23,6 @@ enum{
 	Debug = 1,
 };
 
-static void *o9fsrealloc(void *, size_t, size_t);
-
 int o9fs_open(void *);
 int o9fs_close(void *);
 int o9fs_lookup(void *);
@@ -88,7 +86,7 @@ o9fs_open(void *v)
 	struct vnode *vp;
 	struct proc *p;
 	struct o9fs *fs;
-	struct o9fid *f;
+	struct o9fid *f, *nf;
 	int error, mode;
 
 	DIN();
@@ -100,18 +98,21 @@ o9fs_open(void *v)
 	f = VTO92(vp);
 
 	printvp(vp);
-	if (o9fs_opencreate2(fs, f, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
-		DBG("failed\n");
+
+	/* BUG: old fid leakage */
+	nf = o9fs_walk(fs, f, NULL, NULL);
+	if (nf == NULL) {
+		DRET();
+		return -1;
+	}
+	free(f, M_O9FS);
+
+	if (o9fs_opencreate2(fs, nf, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
 		DRET();
 		return -1;
 	}
 
-	vp->v_data = f; /* walk has set other properties */
-
-	if(f->qid.type == O9FS_QTDIR)
-		vp->v_type = VDIR;
-	else
-		vp->v_type = VREG;
+	vp->v_data = nf; /* walk has set other properties */
 
 out:
 	DRET();
@@ -132,7 +133,6 @@ o9fs_close(void *v)
 	f = VTO92(vp);
 
 	if (f == NULL) {
-		DBG("nil fid\n");
 		DRET();
 		return 0;
 	}
@@ -322,23 +322,27 @@ o9fs_readdir(void *v)
 	struct vop_readdir_args *ap;
 	struct vnode *vp;
 	struct uio *uio;
-	struct o9fsfid *f;
+	struct o9fid *f;
 	struct o9fs *fs;
 	struct o9fsstat *stat;
 	struct dirent d;
 	u_char *buf, *nbuf;
 	long n, ts;
-	int error, *eofflag, i, msize;
+	int error, i;
 	int64_t len;
 	DIN();
 
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
-	eofflag = ap->a_eofflag;
 	fs = VFSTOO9FS(vp->v_mount);
 	f = VTO92(vp);
-	error = i = n = 0;
+	error = 0;
+
+	if (vp->v_type != VDIR) {
+		DRET();
+		return ENOTDIR;
+	}
 
 	if (uio->uio_resid == 0) {
 		DRET();
@@ -346,20 +350,21 @@ o9fs_readdir(void *v)
 	}
 
 	len = uio->uio_resid;
-	msize = fs->msize - O9FS_IOHDRSZ;
-	if (len > msize)
-		len = msize;
-
-	buf = malloc(O9FS_DIRMAX, M_O9FS, M_WAITOK);
 	ts = n = 0;
+	buf = malloc(O9FS_DIRMAX, M_O9FS, M_WAITOK);
+
 	for (;;) {
 		nbuf = o9fsrealloc(buf, ts+O9FS_DIRMAX-n, ts+O9FS_DIRMAX);
 		buf = nbuf;
-		n = o9fs_rdwr(fs, O9FS_TREAD, f, buf+ts, 1024, -1);
+		n = o9fs_rdwr2(fs, f, O9FS_TREAD, len, f->offset);
 		if (n <= 0)
 			break;
+		memcpy(buf + ts, fs->inbuf + Minhd + 4, n);
+		f->offset += n;
 		ts += n;
+		len -= n;
 	}
+
 	if (ts >= 0) {
 		ts = dirpackage(buf, ts, &stat);
 		if (ts < 0)
@@ -371,6 +376,7 @@ o9fs_readdir(void *v)
 		DRET();
 		return -1;
 	}
+
 	for (i = 0; i < ts; i++) {
 		d.d_fileno = (uint32_t)stat[i].qid.path;
 		d.d_type = vp->v_type == VDIR ? DT_DIR : DT_REG;
@@ -381,7 +387,7 @@ o9fs_readdir(void *v)
 		error = uiomove(&d, d.d_reclen, uio);
 		if (error) {
 			DBG("uiomove error\n");
-			DRET():
+			DRET();
 			return -1;
 		}
 	}
@@ -471,12 +477,13 @@ o9fs_lookup(void *v)
 	*vpp = NULL;
 
 	path = NULL;
+	DBG("name %s\n", cnp->cn_nameptr);
 	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-	/*	DBG("dot\n");
+		DBG("dot\n");
 		vref(dvp);
 		*vpp = dvp;
 		DRET();
-		return 0; */
+		return 0;
 		nf = NULL;
 	} else {
 		path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
@@ -484,7 +491,7 @@ o9fs_lookup(void *v)
 		nf = o9fs_xgetfid(fs);
 	}
 
-	/* todo: watch for fid and path leakage */
+	/* BUG: fid and path leakage */
 	f = o9fs_walk(fs, parf, nf, path);
 	if (f == NULL) {
 		DBG("%s not found\n", cnp->cn_nameptr);
@@ -513,6 +520,12 @@ o9fs_lookup(void *v)
 		flags |= PDIRUNLOCK;
 	}
 	
+	if(f->qid.type == O9FS_QTDIR)
+		(*vpp)->v_type = VDIR;
+	else
+		(*vpp)->v_type = VREG;
+	printvp(*vpp);
+
 	DRET();
 	return 0;
 }
@@ -578,30 +591,12 @@ o9fs_setattr(void *v)
  	struct vop_setattr_args *ap;
 	ap = v;
 
-	/*
-	 * Can't mess with the root vnode
-	 */
-
 	if (ap->a_vp->v_flag & VROOT)
 		return EACCES;
 
 	if (ap->a_vap->va_flags != VNOVAL)
 		return EOPNOTSUPP;
 	return 0;
-}
-
-static void *
-o9fsrealloc(void *ptr, size_t oldsize, size_t newsize)
-{
-	void *p;
-	
-	if (newsize == oldsize)
-		return ptr;
-	p = malloc(newsize, M_O9FS, M_WAITOK);
-	if (ptr)
-		bcopy(ptr, p, oldsize);
-	ptr = p;
-	return p;
 }
 
 int
@@ -625,7 +620,6 @@ o9fs_inactive(void *v)
 	return 0;
 }
 
-/* this should suffice for now */
 int
 o9fs_reclaim(void *v)
 {
