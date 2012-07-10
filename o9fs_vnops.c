@@ -105,13 +105,14 @@ o9fs_open(void *v)
 		DRET();
 		return -1;
 	}
-	free(f, M_O9FS);
 
 	if (o9fs_opencreate2(fs, nf, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
+		o9fs_xputfid(fs, nf);
 		DRET();
 		return -1;
 	}
 
+	nf->parent = f;
 	vp->v_data = nf; /* walk has set other properties */
 
 out:
@@ -132,13 +133,15 @@ o9fs_close(void *v)
 	vp = ap->a_vp;
 	f = VTO92(vp);
 
+	printvp(vp);
 	if (f == NULL) {
 		DRET();
 		return 0;
 	}
 
 	fs = VFSTOO9FS(vp->v_mount);
-//	o9fs_clunk(fs, f);
+	o9fs_clunk(fs, f);
+	f->ref = 0;
 	DRET();
 	return 0;
 }
@@ -478,14 +481,17 @@ o9fs_lookup(void *v)
 
 	path = NULL;
 	DBG("name %s\n", cnp->cn_nameptr);
-	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
-		DBG("dot\n");
-		vref(dvp);
-		*vpp = dvp;
-		DRET();
-		return 0;
+
+	if (parf->mode != -1) {
+		DBG("fid %d already opened! parent %d\n", parf->fid, parf->parent->fid);
+		f = parf;
+		parf = parf->parent;
+	}
+
+	/* On dot, clone */
+	if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.')
 		nf = NULL;
-	} else {
+	else {
 		path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
 		strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
 		nf = o9fs_xgetfid(fs);
@@ -519,7 +525,7 @@ o9fs_lookup(void *v)
 		VOP_UNLOCK(dvp, 0, p);
 		flags |= PDIRUNLOCK;
 	}
-	
+
 	if(f->qid.type == O9FS_QTDIR)
 		(*vpp)->v_type = VDIR;
 	else
@@ -529,8 +535,6 @@ o9fs_lookup(void *v)
 	DRET();
 	return 0;
 }
-
-
 
 int
 o9fs_getattr(void *v)
@@ -603,19 +607,8 @@ int
 o9fs_inactive(void *v)
 {
 	struct vop_inactive_args *ap;
-	struct o9fid *f;
+	struct vnode *vp;
 	DIN();
-
-	ap = v;
-	VOP_UNLOCK(ap->a_vp, 0, ap->a_p);
-	f = VTO92(ap->a_vp);
-	f->ref--;
-	printvp(ap->a_vp);
-
-	/* TODO: is this an appropriate approach? */
-	if (f->ref == 0)
-		o9fs_clunk(VFSTOO9FS(ap->a_vp->v_mount), f);
-	
 	DRET();
 	return 0;
 }
@@ -625,11 +618,14 @@ o9fs_reclaim(void *v)
 {
 	struct vop_reclaim_args *ap;
 	struct vnode *vp;
+	struct o9fid *f;
 	DIN();
 	
 	ap = v;
 	vp = ap->a_vp;
-
+	f = VTO92(vp);
+	printvp(vp);
+	vp->v_data = NULL;
 	DRET();
 	return 0;
 }

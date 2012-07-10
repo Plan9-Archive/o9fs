@@ -55,7 +55,8 @@ o9fs_xgetfid(struct o9fs *fs)
 		TAILQ_REMOVE(&fs->freeq, f, next);
 	}
 
-	f->ref = 0;
+	f->ref = 1;
+	f->parent = NULL;
 	f->offset = 0;
 	f->mode = -1;
 	f->iounit = 0;

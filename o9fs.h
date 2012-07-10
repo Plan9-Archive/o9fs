@@ -57,6 +57,7 @@ struct o9fid {
 	struct		o9fsqid	qid;
 	uint64_t	offset;
 
+	struct		o9fid *parent;
 	int			ref;
 	TAILQ_ENTRY(o9fid) next;
 };
