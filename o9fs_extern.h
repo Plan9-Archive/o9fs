@@ -14,9 +14,6 @@ long	o9fs_mio(struct o9fs *, u_long);
 
 /* o9fs_9p.c */
 uint32_t	o9fs_rdwr2(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint64_t);
-void	o9fs_fidclunk(struct o9fs *, struct o9fsfid *);
-struct	o9fsfid *o9fs_twalk(struct o9fs *, struct o9fsfid *, struct o9fsfid *, char *);
-int		o9fs_opencreate(int, struct o9fs *, struct o9fsfid *, int, ulong, char *);
 int		o9fs_opencreate2(struct o9fs *, struct o9fid *, uint8_t, uint8_t, uint32_t, char *);
 struct	o9fid *o9fs_walk(struct o9fs *, struct o9fid *, struct o9fid *, char *);
 void	o9fs_clunk(struct o9fs *, struct o9fid *);

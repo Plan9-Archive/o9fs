@@ -15,8 +15,6 @@
 	}\
 }while(0)
 
-#define nelem(a) (sizeof(a) / sizeof(*a))
-
 struct o9fsqid {
 	uint8_t		type;
 	uint32_t	vers;
@@ -35,17 +33,6 @@ struct o9fsstat {
 	char		*uid;			/* owner name */
 	char		*gid;			/* group name */
 	char		*muid;			/* last modifier name */
-};
-
-/* 9p file */
-struct o9fsfid {
-	int	fid;
-	int	mode;				/* open mode */
-	int	opened;
-//	int ref;				/* reference count */
-	struct o9fsqid qid;
-	int64_t	offset;
-	struct	o9fsfid *next;
 };
 
 /*
@@ -73,39 +60,6 @@ struct o9fid {
 #define	O9FS_VERSION9P	"9P2000"
 #define	O9FS_MAXWELEM	16
 
-struct o9fsfcall
-{
-	u_char			type;
-	uint32_t		fid;
-	u_short			tag;
-	uint32_t		msize;		/* Tversion, Rversion */
-	char			*version;	/* Tversion, Rversion */
-
-	u_short			oldtag;		/* Tflush */
-
-	char			*ename;		/* Rerror */
-
-	struct o9fsqid	qid;		/* Rattach, Ropen, Rcreate */
-	uint32_t		iounit;		/* Ropen, Rcreate */
-	struct o9fsqid	aqid;		/* Rauth */
-	uint32_t		afid;		/* Tauth, Tattach */
-	char			*uname;		/* Tauth, Tattach */
-	char			*aname;		/* Tauth, Tattach */
-	uint32_t		perm;		/* Tcreate */ 
-	char			*name;		/* Tcreate */
-	u_char			mode;		/* Tcreate, Topen */
-	uint32_t		newfid;		/* Twalk */
-	u_short			nwname;		/* Twalk */
-	char			*wname[O9FS_MAXWELEM];	/* Twalk */
-	u_short			nwqid;		/* Rwalk */
-	struct o9fsqid	wqid[O9FS_MAXWELEM];	/* Rwalk */
-	int64_t			offset;				/* Tread, Twrite */
-	uint32_t		count;				/* Tread, Twrite, Rread */
-	char			*data;				/* Twrite, Rread */
-	u_short			nstat;				/* Twstat, Rstat */
-	u_char			*stat;				/* Twstat, Rstat */
-};
-
 enum {
 	Offtype	= 4,
 	Offtag	= 5,
@@ -120,10 +74,6 @@ struct o9fs {
 	struct	file *servfp;		/* File pointing to the server */
 	long	msize;				/* Maximum size of our payload */
 	
-	struct o9fsfcall	request;	/* request we are doing */
-	struct o9fsfcall	reply;		/* reply we received */
-	u_char	*rpc;
-
 	/* 
      * Buffers for I/O
 	 * Both buffers have the client requested msize,
@@ -136,16 +86,7 @@ struct o9fs {
 	TAILQ_HEAD(, o9fid)	activeq;
 	TAILQ_HEAD(, o9fid) freeq;
 	int	nextfid;
-
-	struct	o9fsfid *freefid;
 };
-
-/* o9fs session */
-/*struct o9fsmount {
-	struct	mount *om_mp;		/* generic mount info */
-	struct	vnode *om_root;		/* local root of the tree */
-	struct	o9fs om_o9fs;		/* 9P info */
-	struct	file *om_fp;
 
 
 /* O9FS_STATFIXLEN includes leading 16-bit count */

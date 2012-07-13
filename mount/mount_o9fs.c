@@ -17,13 +17,6 @@
 
 #include "o9fs.h"
 
-/*#include "mntopts.h"
-
-const struct mntopt opts[] = {
-	MOPT_STDOPTS,
-	{ NULL }
-};*/
-
 __dead void
 usage(void)
 {
@@ -114,16 +107,6 @@ main(int argc, char *argv[])
 	int ch, flags;
 
 	flags = 0;
-
-	while ((ch = getopt(argc, argv, "o:")) != -1);
-	/*	switch (ch) {
-		case 'o':
-			getmntopts(optarg, opts, &flags);
-			break;
-		default:
-			usage();
-		}*/
-
 	argc -= optind;
 	argv += optind;
 
