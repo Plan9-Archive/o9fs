@@ -20,7 +20,7 @@
 #include "o9fs_extern.h"
 
 enum{
-	Debug = 1,
+	Debug = 0,
 };
 
 int o9fs_open(void *);
@@ -247,7 +247,6 @@ o9fs_read(void *v)
 	struct o9fid *f;
 	struct o9fs *fs;
 	uint32_t n;
-	int64_t len;
 
 	ap = v;
 	vp = ap->a_vp;
@@ -261,8 +260,7 @@ o9fs_read(void *v)
 	if (uio->uio_resid == 0)
 		return 0;
 
-	len = uio->uio_resid;
-	n = o9fs_rdwr2(fs, f, O9FS_TREAD, len, uio->uio_offset);
+	n = o9fs_rdwr2(fs, f, O9FS_TREAD, uio->uio_resid, uio->uio_offset);
 	if (n > 0)
 		return uiomove(fs->inbuf + Minhd + 4, n, uio);
 	return n;
@@ -400,25 +398,24 @@ o9fs_write(void *v)
 	struct vop_read_args *ap;
 	struct vnode *vp;
 	struct uio *uio;
-	struct o9fsfid *f;
+	struct o9fid *f;
+	struct o9fs *fs;
 	int ioflag, error, msize;
-	char *buf;
-	long n;
+	uint32_t n;
 	int64_t len;
 	off_t offset;
+	DIN();
 
-	DBG("write: enter\n");
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
 	ioflag = ap->a_ioflag;
-	f = VTO9(vp);
+	f = VTO92(vp);
+	fs = VFSTOO9FS(vp->v_mount);
 	error = n = 0;
 
-	DBG("write: vp=%p v_type=%d\n", vp, vp->v_type); 
-
 	if (uio->uio_offset < 0 || vp->v_type != VREG) {
-		DBG("write: return EINVAL\n");
+		DRET();
 		return EINVAL;
 	}
 
@@ -429,21 +426,18 @@ o9fs_write(void *v)
 	if (ioflag & IO_APPEND) {
 		struct stat st;
 		if(vn_stat(vp, &st, curproc) == 0)
-			uio->uio_offset = offset = st.st_size;
+			offset = st.st_size;
 	}
 
 	len = uio->uio_resid;
-	msize = VFSTOO9FS(vp->v_mount)->msize - O9FS_IOHDRSZ;
-	if (len > msize)
-		len = msize;
-	buf = malloc(len, M_O9FS, M_WAITOK);
-
-	error = uiomove(buf, len, uio);
-	n = o9fs_rdwr(VFSTOO9FS(vp->v_mount), O9FS_TWRITE, f, buf, len, offset);
-	if (n < 0)
+	error = uiomove(fs->outbuf + Minhd + 4 + 8 + 4, len, uio);
+	n = o9fs_rdwr2(fs, f, O9FS_TWRITE, len, offset);
+	if (n < 0) {
+		DRET();
 		return -1;
-	free(buf, M_O9FS);
-	DBG("write: return\n");
+	}
+	f->offset = offset + n;
+	DRET();
 	return error;
 }
 

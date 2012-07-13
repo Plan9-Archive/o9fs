@@ -9,7 +9,7 @@
 #include "o9fs_extern.h"
 
 enum{
-	Debug = 1,
+	Debug = 0,
 };
 
 void
@@ -216,10 +216,13 @@ o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_
 		len = f->iounit;
 	if (len > fs->msize)
 		len = fs->msize - O9FS_IOHDRSZ;
+
 	O9FS_PBIT32(p + Minhd + 4 + 8, len);
 	p += Minhd + 4 + 8 + 4;
-
+	if (type == O9FS_TWRITE)
+		p += len;
 	n = p - fs->outbuf;
+
 	O9FS_PBIT32(fs->outbuf, n);
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
@@ -228,7 +231,6 @@ o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_
 	}
 
 	n = O9FS_GBIT32(fs->inbuf + Minhd);
-	DBG("read %ld bytes\n", n);
 	DRET();
 	return n;
 }

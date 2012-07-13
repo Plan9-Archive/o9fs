@@ -9,8 +9,10 @@
 #define DRET() DBG("<<<\n")
 
 #define printvp(x) do{\
-	printf("%s: ", __FUNCTION__);\
-	_printvp((x));\
+	if(Debug){\
+		printf("%s: ", __FUNCTION__);\
+		_printvp((x));\
+	}\
 }while(0)
 
 #define nelem(a) (sizeof(a) / sizeof(*a))

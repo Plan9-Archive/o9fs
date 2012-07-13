@@ -10,7 +10,7 @@
 #include "o9fs_extern.h"
 
 enum{
-	Debug = 1,
+	Debug = 0,
 };
 
 extern struct vnodeopv_desc o9fs_vnodeop_opv_desc;
