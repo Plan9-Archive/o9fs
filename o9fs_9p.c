@@ -137,64 +137,6 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 	return stat;
 }
 	
-
-struct o9fsstat *
-o9fs_fstat(struct o9fs *fs, struct o9fsfid *fid)
-{
-	struct o9fsstat *stat;
-	struct o9fsfcall tx, rx;
-
-	tx.type = O9FS_TSTAT;
-	tx.fid = fid->fid;
-	if ((o9fs_rpc(fs, &tx, &rx)) == -1)
-		return NULL;
-
-	stat = malloc(sizeof(struct o9fsstat) + rx.nstat,	M_O9FS, M_WAITOK);
-	if (!o9fs_convM2D(rx.stat, rx.nstat, stat, (char*)rx.stat))
-		return NULL;
-
-	return stat;
-}
-
-long
-o9fs_rdwr(struct o9fs *fs, int type, struct o9fsfid *f, void *buf, 
-		u_long n, int64_t offset)
-{
-	char *uba;
-	u_long nr;
-	
-	uba = buf;
-	fs->request.type = type;
-	fs->request.fid = f->fid;
-
-	if (offset == -1)
-		fs->request.offset= f->offset;
-	else
-		fs->request.offset = offset;
-
-	if (type == O9FS_TWRITE)
-		fs->request.data = uba;
-
-	nr = n;
-	if (nr > fs->msize)
-		nr = fs->msize;
-	fs->request.count = nr;
-
-	if ((o9fs_rpc(fs, &fs->request, &fs->reply)) < 0)
-		return -1;
-
-	nr = fs->reply.count;
-	if (nr <= 0)
-		return nr;
-
-	if (type == O9FS_TREAD)
-		memcpy((u_char *)uba, fs->reply.data, nr);
-
-	if (offset == -1)
-		f->offset += fs->reply.count;
-	return nr;
-}
-
 uint32_t
 o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t off)
 {

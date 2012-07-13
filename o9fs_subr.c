@@ -106,47 +106,6 @@ getstring(char *buf)
 	return s;
 }	
 
-void
-o9fs_freestat(struct o9fsstat *s)
-{
-	/* let'em leak! */
-/*	if(s->name != NULL)
-		free(s->name, M_O9FS);
-	if(s->uid != NULL)
-		free(s->uid, M_O9FS);
-	if(s->gid != NULL)
-		free(s->gid, M_O9FS);
-	if(s->muid)
-		free(s->muid, M_O9FS); */
-	s->name = s->uid = s->gid = s->muid = NULL;
-}
-
-void
-o9fs_freefcall(struct o9fsfcall *fcall)
-{
-	void *p;
-
-	switch(fcall->type) {
-	case O9FS_RSTAT:
-		p = fcall->stat;
-		break;
-	case O9FS_RREAD:
-		p = fcall->data;
-		break;
-	case O9FS_RVERSION:
-		p = fcall->version;
-		break;
-	case O9FS_RERROR:
-		p = fcall->ename;
-		break;
-	default:
-		return;
-	}
-	
-	free(p, M_O9FS);
-	p = NULL;
-}
-
 int
 o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 {
@@ -250,4 +209,74 @@ _printvp(struct vnode *vp)
 		return;
 	}
 	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d iounit %ld\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type, f->mode, f->iounit);
+}
+
+static long
+rdwr(struct o9fs *fs, void *buf, long count, off_t *offset, int write)
+{
+	struct file *fp;
+	struct uio auio;
+	struct iovec aiov;
+	long cnt;
+	int error;
+
+	error = 0;
+	fp = fs->servfp;
+	aiov.iov_base = buf;
+	cnt = aiov.iov_len = auio.uio_resid = count;
+	auio.uio_iov = &aiov;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_procp = curproc;
+
+	if (write) {
+		auio.uio_rw = UIO_WRITE;
+		error = (*fp->f_ops->fo_write)(fp, offset, &auio, fp->f_cred);
+		cnt -= auio.uio_resid;
+
+		fp->f_wxfer++;
+		fp->f_wbytes += cnt;
+	} else {
+		auio.uio_rw = UIO_READ;
+		error = (*fp->f_ops->fo_read)(fp, offset, &auio, fp->f_cred);
+		cnt -= auio.uio_resid;
+
+		fp->f_rxfer++;
+		fp->f_rbytes += cnt;
+	}
+	if (error)
+		return -error;
+	return cnt;
+}
+
+long
+o9fs_mio(struct o9fs *fs, u_long len)
+{
+	long n;
+
+	n = rdwr(fs, fs->outbuf, len, &fs->servfp->f_offset, 1);
+	if (n <= 0)
+		return n;
+
+	n = rdwr(fs, fs->inbuf, 4, &fs->servfp->f_offset, 0);
+	if (n <= 0) {
+		printf("o9fs_mio: Error reading message size\n");
+		return n;
+	}
+	
+	len = O9FS_GBIT32(fs->inbuf);
+	if (len <= 4) {
+		printf("R-message with length < 4\n");
+		return -1;
+	}
+
+	n = rdwr(fs, fs->inbuf + Offtype, len - Offtype, &fs->servfp->f_offset, 0);
+	if (n <= 0)
+		return n;
+
+	if (O9FS_GBIT8(fs->inbuf + Offtype) == O9FS_RERROR) {
+		printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 2);
+		return -1;
+	}
+
+	return len;
 }
