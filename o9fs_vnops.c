@@ -49,7 +49,7 @@ struct vops o9fs_vops = {
 	.vop_bmap = eopnotsupp,
 	.vop_bwrite = eopnotsupp,
 	.vop_close = o9fs_close,
-	.vop_create = eopnotsupp,
+	.vop_create = o9fs_create,
 	.vop_fsync = nullop,
 	.vop_getattr = o9fs_getattr,
 	.vop_inactive = o9fs_inactive,
@@ -87,13 +87,11 @@ o9fs_open(void *v)
 	struct proc *p;
 	struct o9fs *fs;
 	struct o9fid *f, *nf;
-	int error, mode;
-
 	DIN();
+
 	ap = v;
 	vp = ap->a_vp;
 	p = ap->a_p;
-	mode = o9fs_uflags2omode(ap->a_mode);
 	fs = VFSTOO9FS(vp->v_mount);
 	f = VTO92(vp);
 
@@ -170,42 +168,53 @@ o9fs_create(void *v)
 	struct vnode *dvp, **vpp;
 	struct componentname *cnp;
 	struct vattr *vap;
-	struct o9fsfid *f, *dirfid;
+	struct o9fid *f, *nf;
 	struct o9fs *fs;
 	int error;
-	
+	DIN();
+
 	ap = v;
 	dvp = ap->a_dvp;
 	cnp = ap->a_cnp;
 	vap = ap->a_vap;
 	vpp = ap->a_vpp;
-	dirfid = VTO9(dvp);
 
+	f = VTO92(dvp);
 	*vpp = NULL;
+
 	fs = VFSTOO9FS(dvp->v_mount);
-	if (f == NULL)
+	if (f == NULL) {
+		DRET();
 		return -1;
-
-
-//	f = o9fs_clone(fs, dirfid);
-	if (f == NULL)
-		goto out;
-
-	if(o9fs_opencreate(O9FS_TCREATE, fs, f, 0, vap->va_mode, cnp->cn_nameptr))
-		goto out;
-
-	error = o9fs_allocvp(dvp->v_mount, f, vpp, 0);
-	if (error) {
-		//o9fs_freevp(*vpp);
-		goto out;
 	}
 
-	if(f->qid.type == O9FS_QTDIR)
-		(*vpp)->v_type = VDIR;
-	else
-		(*vpp)->v_type = VREG;
-out:
+	/* BUG: old fid leakage */
+	nf = o9fs_walk(fs, f, NULL, NULL);
+	if (nf == NULL) {
+		o9fs_xputfid(fs, nf);
+		DRET();
+		return -1;
+	}
+
+	if (o9fs_opencreate2(fs, nf, O9FS_TCREATE, 0, vap->va_mode, cnp->cn_nameptr) < 0) {
+		o9fs_xputfid(fs, nf);
+		DRET();
+		return -1;
+	}
+	o9fs_clunk(fs, nf);
+	o9fs_xputfid(fs, nf);
+
+	/* walk from parent dir to get an unopened fid, break create+open atomicity of 9P */
+	nf = o9fs_walk(fs, f, NULL, cnp->cn_nameptr);
+	if (nf == NULL) {
+		o9fs_xputfid(fs, nf);
+		DRET();
+		return -1;
+	}
+	
+	error = o9fs_allocvp(dvp->v_mount, nf, vpp, 0);
 	vput(dvp);
+	DRET();
 	return error;
 }
 
@@ -465,7 +474,6 @@ o9fs_lookup(void *v)
 	parf = VTO92(dvp);			/* parent fid */
 	error = 0;
 	*vpp = NULL;
-
 	path = NULL;
 
 	if (parf->mode != -1) {

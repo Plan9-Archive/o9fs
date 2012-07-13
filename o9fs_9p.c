@@ -250,10 +250,21 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 	O9FS_PBIT8(p + Offtype, type);
 	O9FS_PBIT16(p + Offtag, 0);
 	O9FS_PBIT32(p + Minhd, fid->fid);
+	p += Minhd + 4;
+
+	if (type == O9FS_TCREATE) {
+		if (name == NULL) {
+			DRET();
+			return -1;
+		}
+		p = putstring(p, name);
+		O9FS_PBIT32(p, perm);
+		p += 4;
+	}
 	omode = o9fs_uflags2omode(mode);
-	O9FS_PBIT8(p + Minhd + 4, omode);
-	
-	n = Minhd + 4 + 1;
+	O9FS_PBIT8(p, omode);
+	n = p + 1 - fs->outbuf;
+
 	O9FS_PBIT32(fs->outbuf, n);
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
@@ -268,32 +279,3 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 	fid->mode = omode;
 	return 0;
 }
-
-int
-o9fs_opencreate(int type, struct o9fs *fs, struct o9fsfid *f, int mode, ulong perm, char *name)
-{
-	int omode, error;
-	struct o9fsfcall tx, rx;
-	
-	omode = o9fs_uflags2omode(mode);
-
-	tx.type = type;
-	tx.fid = f->fid;
-	tx.mode = omode;
-	if (type == O9FS_TCREATE) {
-		tx.name = name;
-		tx.mode = O9FS_ORDWR; /* try ORDWR on open */
-		tx.perm = o9fs_utopmode(perm);
-	}
-
-	error = o9fs_rpc(fs, &tx, &rx);
-	if (error)
-		return error;
-
-	f->qid = rx.qid;
-	f->offset = 0;
-	f->opened = 1;
-	f->mode = omode;
-	return 0;
-}
-

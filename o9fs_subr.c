@@ -151,14 +151,9 @@ int
 o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 {
 	struct vnode *vp;
-	struct proc *p;
 	int error;
-
 	DIN();
 
-	p = curproc;
-	error = 0;
-	
 	error = getnewvnode(VT_O9FS, mp, &o9fs_vops, vpp);
 	if (error) {
 		*vpp = NULL;
@@ -177,7 +172,7 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 	vp->v_flag = flag;
 	printvp(vp);
 	DRET();
-	return error;
+	return 0;
 }
 
 int
