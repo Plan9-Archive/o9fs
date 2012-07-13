@@ -107,6 +107,7 @@ o9fs_open(void *v)
 	}
 
 	if (o9fs_opencreate2(fs, nf, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
+		DBG("failed open\n");
 		o9fs_xputfid(fs, nf);
 		DRET();
 		return -1;
@@ -140,8 +141,6 @@ o9fs_close(void *v)
 	}
 
 	fs = VFSTOO9FS(vp->v_mount);
-	o9fs_clunk(fs, f);
-	f->ref = 0;
 	DRET();
 	return 0;
 }
@@ -480,10 +479,10 @@ o9fs_lookup(void *v)
 	*vpp = NULL;
 
 	path = NULL;
-	DBG("name %s\n", cnp->cn_nameptr);
 
 	if (parf->mode != -1) {
-		DBG("fid %d already opened! parent %d\n", parf->fid, parf->parent->fid);
+		DBG("parent %d is open, moving to %d\n", parf->fid, parf->parent->fid);
+		vref(dvp);
 		f = parf;
 		parf = parf->parent;
 	}
@@ -496,6 +495,7 @@ o9fs_lookup(void *v)
 		strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
 		nf = o9fs_xgetfid(fs);
 	}
+	printvp(dvp);
 
 	/* BUG: fid and path leakage */
 	f = o9fs_walk(fs, parf, nf, path);
@@ -608,7 +608,14 @@ o9fs_inactive(void *v)
 {
 	struct vop_inactive_args *ap;
 	struct vnode *vp;
+	struct o9fid *f;
 	DIN();
+
+	ap = v;
+	vp = ap->a_vp;
+	f = VTO92(vp);
+	if(!(vp->v_flag & VXLOCK))
+		vgone(vp);
 	DRET();
 	return 0;
 }
@@ -625,6 +632,8 @@ o9fs_reclaim(void *v)
 	vp = ap->a_vp;
 	f = VTO92(vp);
 	printvp(vp);
+	o9fs_clunk(VFSTOO9FS(vp->v_mount), f);
+//	o9fs_xputfid(VFSTOO9FS(vp->v_mount), f);
 	vp->v_data = NULL;
 	DRET();
 	return 0;

@@ -16,7 +16,7 @@
 #include "o9fs_extern.h"
 
 enum{
-	Debug = 1,
+	Debug = 0,
 };
 
 enum {
@@ -174,9 +174,8 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 		vp->v_type = VREG;
 
 	vp->v_data = f;
-	f->ref++;
 	vp->v_flag = flag;
-
+	printvp(vp);
 	DRET();
 	return error;
 }
@@ -250,8 +249,10 @@ _printvp(struct vnode *vp)
 {
 	struct o9fid *f;
 
-	if (vp == NULL || VTO92(vp) == NULL)
-		return;
 	f = VTO92(vp);
+	if (vp == NULL || f == NULL) {
+		printf("vp %p fid %p\n",  vp, f);
+		return;
+	}
 	printf("[%p] %p fid %d ref %d qid (%.16llx %lu %d) mode %d iounit %ld\n", vp, f, f->fid, f->ref, f->qid.path, f->qid.vers, f->qid.type, f->mode, f->iounit);
 }

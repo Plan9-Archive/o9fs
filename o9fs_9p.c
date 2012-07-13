@@ -26,7 +26,6 @@ o9fs_clunk(struct o9fs *fs, struct o9fid *f)
 	O9FS_PBIT32(fs->outbuf + Minhd, f->fid);
 	
 	o9fs_mio(fs, 11);
-	o9fs_xputfid(fs, f);
 	DRET();
 }
 
@@ -55,6 +54,8 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 		newfid->mode = fid->mode;
 		newfid->qid = fid->qid;
 		newfid->offset = fid->offset;
+		newfid->parent = fid->parent;
+		newfid->ref = fid->ref;
 		nwname = 0;
 		p += Minhd + 4 + 4 + 2;		/* Advance after nwname, which will be filled later */
 	}
@@ -63,6 +64,8 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 		p = putstring(fs->outbuf + Minhd + 4 + 4 + 2, name);
 		nwname = 1;
 	}
+
+	DBG("fid %p %d newfid %p %d\n", fid, fid->fid, newfid, newfid->fid);
 
 	O9FS_PBIT32(fs->outbuf + Minhd + 4, newfid->fid);
 	O9FS_PBIT16(fs->outbuf + Minhd + 4 + 4, nwname);

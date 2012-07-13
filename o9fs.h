@@ -49,6 +49,7 @@ struct o9fsfid {
 /*
  * Many vnodes can refer to the same o9fid and this is accounted for in ref.
  * When ref drops to zero, the o9fid is clunked.
+ * Every change in o9fid should be checking in the cloning process in o9fs_9p.c:/^o9fs_walk
  */
 struct o9fid {
 	int32_t		fid;

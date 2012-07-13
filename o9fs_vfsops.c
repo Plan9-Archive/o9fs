@@ -16,7 +16,7 @@
 #include "o9fs_extern.h"
 
 enum{
-	Debug = 1,
+	Debug = 0,
 };
 
 #define o9fs_init ((int (*)(struct vfsconf *))nullop)
@@ -135,16 +135,8 @@ mounto9fs(struct mount *mp, struct file *fp)
 	struct o9fid *fid;
 
 	fs = (struct o9fs *) malloc(sizeof(struct o9fs), M_MISCFSMNT, M_WAITOK | M_ZERO);
-	if (getnewvnode(VT_O9FS, mp, &o9fs_vops, &rvp) != 0)
-		return EIO;
-
-	rvp->v_type = VDIR;
-	rvp->v_flag = VROOT;
-
-	fs->vroot = rvp;
 	fs->mp = mp;
 	fs->servfp = fp;
-
 	mp->mnt_data = (qaddr_t) fs;
 	vfs_getnewfsid(mp);	
 
@@ -161,7 +153,6 @@ mounto9fs(struct mount *mp, struct file *fp)
 	if (fid == NULL)
 		return EIO;	
 
-	fs->vroot->v_data = fid;
 	return o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
 }
 	
@@ -188,6 +179,7 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 
 	if (mounto9fs(mp, fp) != 0)
 		return EIO;
+	printvp(VFSTOO9FS(mp)->vroot);
 
 	error = copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &len);
 	if (error)
@@ -211,29 +203,23 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	DIN();
 
 	fs = VFSTOO9FS(mp);
-/*	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
+	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
 	if (f == NULL) {
 		DRET();
 		return -1;
-	}  */
+	}
 
-    DBG("root fid qid.type %d\n", VTO92(fs->vroot)->qid.type);
-	error = o9fs_allocvp(mp, VTO92(fs->vroot), vpp, VROOT);
+	error = o9fs_allocvp(mp, f, vpp, VROOT);
 	if (error) {
 		DBG("failed to alloc vnode\n");
 		DRET();
 		return error;
 	}
 	vn_lock(*vpp, LK_EXCLUSIVE | LK_RETRY, curproc);
-
-	DBG("cloned root to vp %p\n", *vpp); 
 	DRET();
 	return 0;
 }
 
-/* this seems weird to me. i based much of the work on
- * portal_unmount. need to check how to do it correctly.
- */
 int
 o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 {
@@ -263,12 +249,11 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		return error;
 	}
 
-/*	free(fs->rpc, M_O9FS);
 	free(fs->inbuf, M_O9FS);
 	free(fs->outbuf, M_O9FS);
-	free(fs, M_MISCFSMNT); */
+	free(fs, M_O9FS);
 	fs = mp->mnt_data = (qaddr_t)0;
-	
+
 	DRET();
 	return 0;
 }
