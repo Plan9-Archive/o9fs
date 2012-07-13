@@ -22,7 +22,15 @@ rdir() {
 	try ls $mtpt/net
 }
 
+rdirlong() {
+	echo Reading directory
+	try ls -l $mtpt/net
+}
+
+
+
 rdir
+rdirlong
 exit 0
 	
 readdir="ls -l $mtpt"

@@ -235,20 +235,16 @@ o9fs_read(void *v)
 	struct vop_read_args *ap;
 	struct vnode *vp;
 	struct uio *uio;
-	struct o9fsfid *f;
+	struct o9fid *f;
 	struct o9fs *fs;
-	int ioflag, error, msize;
-	char *buf;
-	long n;
+	uint32_t n;
 	int64_t len;
 
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
-	ioflag = ap->a_ioflag;
-	f = VTO9(vp);
+	f = VTO92(vp);
 	fs = VFSTOO9FS(vp->v_mount);
-	error = 0;
 
 	if (uio->uio_offset < 0)
 		return EINVAL;
@@ -257,18 +253,10 @@ o9fs_read(void *v)
 		return 0;
 
 	len = uio->uio_resid;
-	msize = fs->msize - O9FS_IOHDRSZ;
-	if (len > msize)
-		len = msize;
-	buf = malloc(len, M_O9FS, M_WAITOK | M_ZERO);
-	n = o9fs_rdwr(fs, O9FS_TREAD, f, buf, 1024, uio->uio_offset);
+	n = o9fs_rdwr2(fs, f, O9FS_TREAD, len, uio->uio_offset);
 	if (n > 0)
-		error = uiomove(fs->reply.data, n, uio);
-	else if (n < 0)
-		error = n;
-
-	free(buf, M_O9FS);
-	return error;
+		return uiomove(fs->inbuf + Minhd + 4, n, uio);
+	return n;
 }
 
 static long
@@ -329,7 +317,7 @@ o9fs_readdir(void *v)
 	struct o9fsstat *stat;
 	struct dirent d;
 	u_char *buf, *nbuf;
-	long n, ts;
+	uint32_t n, ts;
 	int error, i;
 	int64_t len;
 	DIN();
