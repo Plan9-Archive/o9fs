@@ -23,7 +23,7 @@ o9fs_clunkremove(struct o9fs *fs, struct o9fid *f, uint8_t type)
 
 	O9FS_PBIT32(fs->outbuf, 11);
 	O9FS_PBIT8(fs->outbuf + Offtype, type);
-	O9FS_PBIT16(fs->outbuf + Offtag, 0);
+	O9FS_PBIT16(fs->outbuf + Offtag, o9fs_tag());
 	O9FS_PBIT32(fs->outbuf + Minhd, f->fid);
 	
 	o9fs_mio(fs, 11);
@@ -49,7 +49,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 
 	p = fs->outbuf;
 	O9FS_PBIT8(p + Offtype, O9FS_TWALK);
-	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	O9FS_PBIT32(p + Minhd, fid->fid);
 
 	if (newfid == NULL) {
@@ -114,7 +114,7 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 
 	O9FS_PBIT32(fs->outbuf, Minhd + 4);
 	O9FS_PBIT8(fs->outbuf + Offtype, O9FS_TSTAT);
-	O9FS_PBIT16(fs->outbuf + Offtag, 0);
+	O9FS_PBIT16(fs->outbuf + Offtag, o9fs_tag());
 	O9FS_PBIT32(fs->outbuf + Minhd, fid->fid);
 	n = o9fs_mio(fs, Minhd + 4);
 	if (n <= 0) {
@@ -155,7 +155,7 @@ o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_
 
 	p = fs->outbuf;
 	O9FS_PBIT8(p + Offtype, type);
-	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	O9FS_PBIT32(p + Minhd, f->fid);
 	O9FS_PBIT64(p + Minhd + 4, off);
 	if (f->iounit > 0 && len > f->iounit)
@@ -199,7 +199,7 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 
 	p = fs->outbuf;
 	O9FS_PBIT8(p + Offtype, type);
-	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	O9FS_PBIT32(p + Minhd, fid->fid);
 	p += Minhd + 4;
 

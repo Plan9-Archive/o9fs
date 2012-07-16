@@ -73,7 +73,7 @@ o9fs_auth(struct o9fs *fs, char *user, char *aname)
 
 	p = fs->outbuf;
 	O9FS_PBIT8(p + Offtype, O9FS_TAUTH);
-	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT16(p + Offtag, o9fs_tag());
 
 	f = o9fs_xgetfid(fs);
 	O9FS_PBIT32(p + Minhd, f->fid);
@@ -105,7 +105,7 @@ o9fs_attach(struct o9fs *fs, struct o9fid *afid, char *user, char *aname)
 	
 	p = fs->outbuf;
 	O9FS_PBIT8(p + Offtype, O9FS_TATTACH);
-	O9FS_PBIT16(p + Offtag, 0);
+	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	
 	f = o9fs_xgetfid(fs);
 	O9FS_PBIT32(p + Minhd, f->fid);

@@ -159,7 +159,7 @@ enum
 #define O9FS_OWRITE	1		/* write */
 #define O9FS_ORDWR	2		/* read and write */
 #define O9FS_OEXEC	3		/* execute, == read but check execute permission */
-
+#define O9FS_OTRUNC	16		/* or'ed in (except for exec), truncate file first */
 
 #define O9FS_DIRMAX		(sizeof(struct o9fsstat)+65535U)	/* max length of o9fsstat structure */
 

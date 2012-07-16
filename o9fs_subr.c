@@ -280,3 +280,10 @@ o9fs_mio(struct o9fs *fs, u_long len)
 
 	return len;
 }
+
+uint16_t
+o9fs_tag(void)
+{
+	return (uint16_t)arc4random()%0xFFFF;
+}
+

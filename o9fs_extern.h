@@ -11,6 +11,7 @@ int		o9fs_uflags2omode(int);
 void	*o9fsrealloc(void *, size_t, size_t);
 void	_printvp(struct vnode *);
 long	o9fs_mio(struct o9fs *, u_long);
+uint16_t	o9fs_tag(void);
 
 /* o9fs_9p.c */
 uint32_t	o9fs_rdwr2(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint64_t);
