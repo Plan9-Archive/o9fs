@@ -16,7 +16,7 @@ long	o9fs_mio(struct o9fs *, u_long);
 uint32_t	o9fs_rdwr2(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint64_t);
 int		o9fs_opencreate2(struct o9fs *, struct o9fid *, uint8_t, uint8_t, uint32_t, char *);
 struct	o9fid *o9fs_walk(struct o9fs *, struct o9fid *, struct o9fid *, char *);
-void	o9fs_clunk(struct o9fs *, struct o9fid *);
+void	o9fs_clunkremove(struct o9fs *, struct o9fid *, uint8_t);
 struct	o9fsstat *o9fs_stat(struct o9fs *, struct o9fid *);
 
 /* o9fs_convM2D.c */

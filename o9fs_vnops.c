@@ -34,6 +34,7 @@ int o9fs_read(void *);
 int o9fs_write(void *);
 int o9fs_mkdir(void *);
 int o9fs_readdir(void *);
+int o9fs_remove(void *);
 int o9fs_inactive(void *);
 int o9fs_reclaim(void *);
 
@@ -66,11 +67,11 @@ struct vops o9fs_vops = {
 	.vop_readlink = eopnotsupp,
 	.vop_reallocblks = eopnotsupp,
 	.vop_reclaim = o9fs_reclaim,
-	.vop_remove = eopnotsupp,
+	.vop_remove = o9fs_remove,
 	.vop_rename = eopnotsupp,
 	.vop_revoke = vop_generic_revoke,
 	.vop_mkdir = o9fs_mkdir,
-	.vop_rmdir = eopnotsupp,
+	.vop_rmdir = o9fs_remove,
 	.vop_setattr = eopnotsupp,
 	.vop_strategy = eopnotsupp,
 	.vop_symlink = eopnotsupp,
@@ -130,15 +131,8 @@ o9fs_close(void *v)
 
 	ap = v;
 	vp = ap->a_vp;
-	f = VTO92(vp);
 
 	printvp(vp);
-	if (f == NULL) {
-		DRET();
-		return 0;
-	}
-
-	fs = VFSTOO9FS(vp->v_mount);
 	DRET();
 	return 0;
 }
@@ -202,7 +196,7 @@ o9fs_create(void *v)
 		DRET();
 		return -1;
 	}
-	o9fs_clunk(fs, nf);
+	o9fs_clunkremove(fs, nf, O9FS_TCLUNK);
 
 	/* walk from parent dir to get an unopened fid, break create+open atomicity of 9P */
 	nf = o9fs_walk(fs, f, NULL, cnp->cn_nameptr);
@@ -387,6 +381,21 @@ o9fs_readdir(void *v)
 			return -1;
 		}
 	}
+	DRET();
+	return 0;
+}
+
+int
+o9fs_remove(void *v)
+{
+	struct vop_remove_args *ap;
+	struct vnode *vp;
+	DIN();
+
+	ap = v;
+	vp = ap->a_vp;
+
+	o9fs_clunkremove(VFSTOO9FS(vp->v_mount), VTO92(vp), O9FS_TREMOVE);
 	DRET();
 	return 0;
 }
@@ -621,7 +630,9 @@ o9fs_reclaim(void *v)
 	vp = ap->a_vp;
 	f = VTO92(vp);
 	printvp(vp);
-	o9fs_clunk(VFSTOO9FS(vp->v_mount), f);
+
+	/* TODO: Removed fids should not be clunked again */
+	o9fs_clunkremove(VFSTOO9FS(vp->v_mount), f, O9FS_TCLUNK);
 //	o9fs_xputfid(VFSTOO9FS(vp->v_mount), f);
 	vp->v_data = NULL;
 	DRET();

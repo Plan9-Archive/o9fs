@@ -14,7 +14,7 @@ enum{
 };
 
 void
-o9fs_clunk(struct o9fs *fs, struct o9fid *f)
+o9fs_clunkremove(struct o9fs *fs, struct o9fid *f, uint8_t type)
 {
 	DIN();
 
@@ -22,7 +22,7 @@ o9fs_clunk(struct o9fs *fs, struct o9fid *f)
 		panic("o9fs_clunk: nil fid");
 
 	O9FS_PBIT32(fs->outbuf, 11);
-	O9FS_PBIT8(fs->outbuf + Offtype, O9FS_TCLUNK);
+	O9FS_PBIT8(fs->outbuf + Offtype, type);
 	O9FS_PBIT16(fs->outbuf + Offtag, 0);
 	O9FS_PBIT32(fs->outbuf + Minhd, f->fid);
 	
