@@ -15,13 +15,16 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "mntopts.h"
 #include "o9fs.h"
+
+const struct mntopt opts[] = { MOPT_STDOPTS, { NULL } };
 
 __dead void
 usage(void)
 {
 	extern char *__progname;
-	fprintf(stderr, "usage: %s [-o options] type!address[!port] mountpoint\n", __progname);
+	fprintf(stderr, "usage: %s [-v] [-o options] type!address[!port] mountpoint\n", __progname);
 	exit(1);
 }
 
@@ -106,7 +109,20 @@ main(int argc, char *argv[])
 	char node[MAXPATHLEN];
 	int ch, flags;
 
+	args.verbose = 0;
 	flags = 0;
+	while ((ch = getopt(argc, argv, "o:v")) != -1)
+		switch (ch) {
+		case 'o':
+			getmntopts(optarg, opts, &flags);
+			break;
+		case 'v':
+			args.verbose = 1;
+			break;
+		default:
+			usage();
+		}
+
 	argc -= optind;
 	argv += optind;
 

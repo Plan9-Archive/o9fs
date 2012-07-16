@@ -168,6 +168,7 @@ enum
 #define MOUNT_O9FS "o9fs"
 #define VT_O9FS VT_NON
 struct o9fs_args {
-	char *hostname;
-	int fd;
+	char	*hostname;
+	int		fd;
+	uint8_t	verbose;
 };

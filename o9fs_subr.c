@@ -23,6 +23,8 @@ enum {
 	Chunk = 64
 };
 
+uint8_t verbose;
+
 void
 o9fs_dump(u_char *buf, long n)
 {
@@ -274,7 +276,8 @@ o9fs_mio(struct o9fs *fs, u_long len)
 		return n;
 
 	if (O9FS_GBIT8(fs->inbuf + Offtype) == O9FS_RERROR) {
-		printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 2);
+		if (verbose)
+			printf("%.*s\n", O9FS_GBIT16(fs->inbuf + Minhd), fs->inbuf + Minhd + 2);
 		return -1;
 	}
 

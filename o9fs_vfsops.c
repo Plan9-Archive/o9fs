@@ -177,6 +177,9 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 	fp->f_count++;
 	FREF(fp);
 
+	if (args.verbose)
+		verbose = 1;
+
 	if (mounto9fs(mp, fp) != 0)
 		return EIO;
 	printvp(VFSTOO9FS(mp)->vroot);

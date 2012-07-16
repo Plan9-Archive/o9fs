@@ -24,5 +24,5 @@ struct	o9fsstat *o9fs_stat(struct o9fs *, struct o9fid *);
 int		o9fs_statcheck(u_char *, u_int);
 u_int	o9fs_convM2D(u_char *, u_int, struct o9fsstat *, char *);
 
-
+extern uint8_t verbose;
 extern struct vops o9fs_vops;
