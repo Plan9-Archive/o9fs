@@ -44,7 +44,7 @@ o9fs_dump(u_char *buf, long n)
 }
 
 struct o9fid *
-o9fs_xgetfid(struct o9fs *fs)
+o9fs_getfid(struct o9fs *fs)
 {
 	struct o9fid *f;
 
@@ -69,17 +69,17 @@ o9fs_xgetfid(struct o9fs *fs)
 }
 
 void
-o9fs_xputfid(struct o9fs *fs, struct o9fid *f)
+o9fs_putfid(struct o9fs *fs, struct o9fid *f)
 {
 	if (f == NULL)
-		panic("o9fs_xputfid: cannot put a nil fid");
+		panic("o9fs_putfid: cannot put a nil fid");
 
 	TAILQ_REMOVE(&fs->activeq, f, next);
 	TAILQ_INSERT_TAIL(&fs->freeq, f, next);
 }
 
 char *
-putstring(char *buf, char *s)
+o9fs_putstr(char *buf, char *s)
 {
 	long n;
 
@@ -93,7 +93,7 @@ putstring(char *buf, char *s)
 }
 
 char *
-getstring(char *buf)
+o9fs_getstr(char *buf)
 {
 	long n;
 	char *s;
@@ -205,7 +205,7 @@ _printvp(struct vnode *vp)
 {
 	struct o9fid *f;
 
-	f = VTO92(vp);
+	f = VTO9(vp);
 	if (vp == NULL || f == NULL) {
 		printf("vp %p fid %p\n",  vp, f);
 		return;

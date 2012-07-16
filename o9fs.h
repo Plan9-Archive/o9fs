@@ -15,16 +15,16 @@
 	}\
 }while(0)
 
-struct o9fsqid {
+struct o9qid {
 	uint8_t		type;
 	uint32_t	vers;
 	uint64_t	path;
 };
 
-struct o9fsstat {
+struct o9stat {
 	uint16_t	type;			/* server type */
 	uint32_t	dev;			/* server subtype */
-	struct		o9fsqid qid;	/* unique id from server */
+	struct		o9qid qid;	/* unique id from server */
 	uint32_t	mode;			/* permissions */
 	uint32_t	atime;			/* last read time */
 	uint32_t	mtime;			/* last write time */
@@ -44,7 +44,7 @@ struct o9fid {
 	int32_t		fid;
 	int8_t		mode;			/* open mode */
 	uint32_t	iounit;
-	struct		o9fsqid	qid;
+	struct		o9qid	qid;
 	uint64_t	offset;
 
 	struct		o9fid *parent;
@@ -52,13 +52,8 @@ struct o9fid {
 	TAILQ_ENTRY(o9fid) next;
 };
 
-#define VTO9(vp) ((struct o9fsfid *)(vp)->v_data)
-#define VTO92(vp) ((struct o9fid *)(vp)->v_data)
+#define VTO9(vp) ((struct o9fid *)(vp)->v_data)
 #define VFSTOO9FS(mp) ((struct o9fs *)((mp)->mnt_data))
-
-
-#define	O9FS_VERSION9P	"9P2000"
-#define	O9FS_MAXWELEM	16
 
 enum {
 	Offtype	= 4,
@@ -161,7 +156,7 @@ enum
 #define O9FS_OEXEC	3		/* execute, == read but check execute permission */
 #define O9FS_OTRUNC	16		/* or'ed in (except for exec), truncate file first */
 
-#define O9FS_DIRMAX		(sizeof(struct o9fsstat)+65535U)	/* max length of o9fsstat structure */
+#define O9FS_DIRMAX		(sizeof(struct o9stat)+65535U)	/* max length of o9fsstat structure */
 
 /* hack */
 #define M_O9FS M_TEMP

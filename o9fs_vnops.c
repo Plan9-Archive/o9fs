@@ -94,7 +94,7 @@ o9fs_open(void *v)
 	vp = ap->a_vp;
 	p = ap->a_p;
 	fs = VFSTOO9FS(vp->v_mount);
-	f = VTO92(vp);
+	f = VTO9(vp);
 
 	printvp(vp);
 
@@ -105,9 +105,9 @@ o9fs_open(void *v)
 		return -1;
 	}
 
-	if (o9fs_opencreate2(fs, nf, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
+	if (o9fs_opencreate(fs, nf, O9FS_TOPEN, ap->a_mode, 0, 0) < 0) {
 		DBG("failed open\n");
-		o9fs_xputfid(fs, nf);
+		o9fs_putfid(fs, nf);
 		DRET();
 		return -1;
 	}
@@ -174,7 +174,7 @@ o9fs_create(void *v)
 	vap = ap->a_vap;
 	vpp = ap->a_vpp;
 
-	f = VTO92(dvp);
+	f = VTO9(dvp);
 	*vpp = NULL;
 
 	fs = VFSTOO9FS(dvp->v_mount);
@@ -186,13 +186,13 @@ o9fs_create(void *v)
 	/* BUG: old fid leakage */
 	nf = o9fs_walk(fs, f, NULL, NULL);
 	if (nf == NULL) {
-		o9fs_xputfid(fs, nf);
+		o9fs_putfid(fs, nf);
 		DRET();
 		return -1;
 	}
 
-	if (o9fs_opencreate2(fs, nf, O9FS_TCREATE, 0, o9fs_utopmode(vap->va_mode), cnp->cn_nameptr) < 0) {
-		o9fs_xputfid(fs, nf);
+	if (o9fs_opencreate(fs, nf, O9FS_TCREATE, 0, o9fs_utopmode(vap->va_mode), cnp->cn_nameptr) < 0) {
+		o9fs_putfid(fs, nf);
 		DRET();
 		return -1;
 	}
@@ -201,7 +201,7 @@ o9fs_create(void *v)
 	/* walk from parent dir to get an unopened fid, break create+open atomicity of 9P */
 	nf = o9fs_walk(fs, f, NULL, cnp->cn_nameptr);
 	if (nf == NULL) {
-		o9fs_xputfid(fs, nf);
+		o9fs_putfid(fs, nf);
 		DRET();
 		return -1;
 	}
@@ -245,7 +245,7 @@ o9fs_read(void *v)
 	ap = v;
 	vp = ap->a_vp;
 	uio = ap->a_uio;
-	f = VTO92(vp);
+	f = VTO9(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 
 	if (uio->uio_offset < 0)
@@ -254,14 +254,14 @@ o9fs_read(void *v)
 	if (uio->uio_resid == 0)
 		return 0;
 
-	n = o9fs_rdwr2(fs, f, O9FS_TREAD, uio->uio_resid, uio->uio_offset);
+	n = o9fs_rdwr(fs, f, O9FS_TREAD, uio->uio_resid, uio->uio_offset);
 	if (n > 0)
 		return uiomove(fs->inbuf + Minhd + 4, n, uio);
 	return n;
 }
 
 static long
-dirpackage(u_char *buf, long ts, struct o9fsstat **d)
+dirpackage(u_char *buf, long ts, struct o9stat **d)
 {
 	char *s;
 	long ss, i, n, nn, m;
@@ -286,12 +286,12 @@ dirpackage(u_char *buf, long ts, struct o9fsstat **d)
 	if (i != ts)
 		return -1;
 
-	*d = malloc(n * sizeof(struct o9fsstat) + ss, M_O9FS, M_WAITOK);
+	*d = malloc(n * sizeof(struct o9stat) + ss, M_O9FS, M_WAITOK);
 
 	/*
 	 * then convert all buffers
 	 */
-	s = (char*)*d + n * sizeof(struct o9fsstat);
+	s = (char*)*d + n * sizeof(struct o9stat);
 	nn = 0;
 	for (i = 0; i < ts; i += m) {
 		m = O9FS_BIT16SZ + O9FS_GBIT16((u_char*)&buf[i]);
@@ -315,7 +315,7 @@ o9fs_readdir(void *v)
 	struct uio *uio;
 	struct o9fid *f;
 	struct o9fs *fs;
-	struct o9fsstat *stat;
+	struct o9stat *stat;
 	struct dirent d;
 	u_char *buf, *nbuf;
 	uint32_t n, ts;
@@ -327,7 +327,7 @@ o9fs_readdir(void *v)
 	vp = ap->a_vp;
 	uio = ap->a_uio;
 	fs = VFSTOO9FS(vp->v_mount);
-	f = VTO92(vp);
+	f = VTO9(vp);
 	error = 0;
 
 	if (vp->v_type != VDIR) {
@@ -346,7 +346,7 @@ o9fs_readdir(void *v)
 	for (;;) {
 		nbuf = o9fsrealloc(buf, ts+O9FS_DIRMAX-n, ts+O9FS_DIRMAX);
 		buf = nbuf;
-		n = o9fs_rdwr2(fs, f, O9FS_TREAD, len, f->offset);
+		n = o9fs_rdwr(fs, f, O9FS_TREAD, len, f->offset);
 		if (n <= 0)
 			break;
 		memcpy(buf + ts, fs->inbuf + Minhd + 4, n);
@@ -395,7 +395,7 @@ o9fs_remove(void *v)
 	ap = v;
 	vp = ap->a_vp;
 
-	o9fs_clunkremove(VFSTOO9FS(vp->v_mount), VTO92(vp), O9FS_TREMOVE);
+	o9fs_clunkremove(VFSTOO9FS(vp->v_mount), VTO9(vp), O9FS_TREMOVE);
 	DRET();
 	return 0;
 }
@@ -418,7 +418,7 @@ o9fs_write(void *v)
 	vp = ap->a_vp;
 	uio = ap->a_uio;
 	ioflag = ap->a_ioflag;
-	f = VTO92(vp);
+	f = VTO9(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 	error = n = 0;
 
@@ -439,7 +439,7 @@ o9fs_write(void *v)
 
 	len = uio->uio_resid;
 	error = uiomove(fs->outbuf + Minhd + 4 + 8 + 4, len, uio);
-	n = o9fs_rdwr2(fs, f, O9FS_TWRITE, len, offset);
+	n = o9fs_rdwr(fs, f, O9FS_TWRITE, len, offset);
 	if (n < 0) {
 		DRET();
 		return -1;
@@ -473,7 +473,7 @@ o9fs_lookup(void *v)
 	islast = flags & ISLASTCN;
 
 	fs = VFSTOO9FS(dvp->v_mount);
-	parf = VTO92(dvp);			/* parent fid */
+	parf = VTO9(dvp);			/* parent fid */
 	error = 0;
 	*vpp = NULL;
 	path = NULL;
@@ -491,7 +491,7 @@ o9fs_lookup(void *v)
 	else {
 		path = malloc(cnp->cn_namelen, M_O9FS, M_WAITOK);
 		strlcpy(path, cnp->cn_nameptr, cnp->cn_namelen+1);
-		nf = o9fs_xgetfid(fs);
+		nf = o9fs_getfid(fs);
 	}
 	printvp(dvp);
 
@@ -541,14 +541,14 @@ o9fs_getattr(void *v)
 	struct vnode *vp;
 	struct vattr *vap;
 	struct o9fid *f;
-	struct o9fsstat *stat;
+	struct o9stat *stat;
 	struct o9fs *fs;
 	DIN();
 
 	ap = v;
 	vp = ap->a_vp;
 	vap = ap->a_vap;
-	f = VTO92(vp);
+	f = VTO9(vp);
 	fs = VFSTOO9FS(vp->v_mount);
 
 	if (f == NULL) {
@@ -611,7 +611,7 @@ o9fs_inactive(void *v)
 
 	ap = v;
 	vp = ap->a_vp;
-	f = VTO92(vp);
+	f = VTO9(vp);
 	if(!(vp->v_flag & VXLOCK))
 		vgone(vp);
 	DRET();
@@ -628,12 +628,12 @@ o9fs_reclaim(void *v)
 	
 	ap = v;
 	vp = ap->a_vp;
-	f = VTO92(vp);
+	f = VTO9(vp);
 	printvp(vp);
 
 	/* TODO: Removed fids should not be clunked again */
 	o9fs_clunkremove(VFSTOO9FS(vp->v_mount), f, O9FS_TCLUNK);
-//	o9fs_xputfid(VFSTOO9FS(vp->v_mount), f);
+//	o9fs_putfid(VFSTOO9FS(vp->v_mount), f);
 	vp->v_data = NULL;
 	DRET();
 	return 0;

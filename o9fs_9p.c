@@ -39,7 +39,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	long n;
 	u_char *p;
 	int nwname, nwqid;
-	struct o9fsqid *nqid;
+	struct o9qid *nqid;
 	DIN();
 
 	if (fid == NULL) {
@@ -54,7 +54,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 
 	if (newfid == NULL) {
 		DBG("cloning fid %d\n", fid->fid);
-		newfid = o9fs_xgetfid(fs);
+		newfid = o9fs_getfid(fs);
 		newfid->mode = fid->mode;
 		newfid->qid = fid->qid;
 		newfid->offset = fid->offset;
@@ -65,7 +65,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	}
 
 	if (name != NULL) {
-		p = putstring(fs->outbuf + Minhd + 4 + 4 + 2, name);
+		p = o9fs_putstr(fs->outbuf + Minhd + 4 + 4 + 2, name);
 		nwname = 1;
 	}
 
@@ -78,7 +78,7 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	O9FS_PBIT32(fs->outbuf, n);
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
-		o9fs_xputfid(fs, newfid);
+		o9fs_putfid(fs, newfid);
 		DRET();
 		return NULL;
 	}
@@ -100,11 +100,11 @@ o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 	return newfid;
 }
 
-struct o9fsstat *
+struct o9stat *
 o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 {
 	long n, nstat;
-	struct o9fsstat *stat;
+	struct o9stat *stat;
 	DIN();
 
 	if (fid == NULL) {
@@ -142,7 +142,7 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 }
 	
 uint32_t
-o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t off)
+o9fs_rdwr(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t off)
 {
 	u_char *p;
 	long n;
@@ -185,7 +185,7 @@ o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_
  * Both mode and perm are in Plan 9 convention.
  */
 int
-o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
+o9fs_opencreate(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
 {
 	long n;
 	u_char *p;
@@ -208,7 +208,7 @@ o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode,
 			DRET();
 			return -1;
 		}
-		p = putstring(p, name);
+		p = o9fs_putstr(p, name);
 		O9FS_PBIT32(p, perm);
 		p += 4;
 	}

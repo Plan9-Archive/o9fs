@@ -50,7 +50,7 @@ o9fs_version(struct o9fs *fs, uint32_t msize)
 	O9FS_PBIT8(p + Offtype, O9FS_TVERSION);
 	O9FS_PBIT16(p + Offtag, O9FS_NOTAG);
 	O9FS_PBIT32(p + Minhd, msize);
-	putstring(p + Minhd + 4, "9P2000");
+	o9fs_putstr(p + Minhd + 4, "9P2000");
 
 	n = o9fs_mio(fs, 19);
 	if (n <= 0)
@@ -75,16 +75,16 @@ o9fs_auth(struct o9fs *fs, char *user, char *aname)
 	O9FS_PBIT8(p + Offtype, O9FS_TAUTH);
 	O9FS_PBIT16(p + Offtag, o9fs_tag());
 
-	f = o9fs_xgetfid(fs);
+	f = o9fs_getfid(fs);
 	O9FS_PBIT32(p + Minhd, f->fid);
-	p = putstring(p + Minhd + 4, user);
-	p = putstring(p, aname);
+	p = o9fs_putstr(p + Minhd + 4, user);
+	p = o9fs_putstr(p, aname);
 	n = p - fs->outbuf;
 	O9FS_PBIT32(fs->outbuf, n);
 
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
-		o9fs_xputfid(fs, f);
+		o9fs_putfid(fs, f);
 		return NULL;
 	}
 	return f;
@@ -107,17 +107,17 @@ o9fs_attach(struct o9fs *fs, struct o9fid *afid, char *user, char *aname)
 	O9FS_PBIT8(p + Offtype, O9FS_TATTACH);
 	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	
-	f = o9fs_xgetfid(fs);
+	f = o9fs_getfid(fs);
 	O9FS_PBIT32(p + Minhd, f->fid);
 	O9FS_PBIT32(p + Minhd + 4, afid ? afid->fid : -1);
-	p = putstring(p + Minhd + 4 + 4, user);
-	p = putstring(p, aname);
+	p = o9fs_putstr(p + Minhd + 4 + 4, user);
+	p = o9fs_putstr(p, aname);
 	
 	n = p - fs->outbuf;
 	O9FS_PBIT32(fs->outbuf, n);
 	n = o9fs_mio(fs, n);
 	if (n <= 0) {
-		o9fs_xputfid(fs, f);
+		o9fs_putfid(fs, f);
 		return NULL;
 	}
 
@@ -206,7 +206,7 @@ o9fs_root(struct mount *mp, struct vnode **vpp)
 	DIN();
 
 	fs = VFSTOO9FS(mp);
-	f = o9fs_walk(fs, VTO92(fs->vroot), NULL, NULL);
+	f = o9fs_walk(fs, VTO9(fs->vroot), NULL, NULL);
 	if (f == NULL) {
 		DRET();
 		return -1;
@@ -237,7 +237,7 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	fs = VFSTOO9FS(mp);
 	fp = fs->servfp;
 	vp = fs->vroot;
-	f = VTO92(vp);
+	f = VTO9(vp);
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
