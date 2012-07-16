@@ -148,24 +148,8 @@ enum
 	O9FS_TMAX
 };
 
-/* bits in Qid.type */
-#define O9FS_QTDIR           0x80            /* type bit for directories */
-#define O9FS_QTAPPEND        0x40            /* type bit for append only files */   
-#define O9FS_QTEXCL          0x20            /* type bit for exclusive use files */
-#define O9FS_QTMOUNT         0x10            /* type bit for mounted channel */
-#define O9FS_QTAUTH          0x08            /* type bit for authentication file */
-#define O9FS_QTTMP           0x04            /* type bit for non-backed-up file */  
-#define O9FS_QTSYMLINK       0x02            /* type bit for symbolic link */
-#define O9FS_QTFILE          0x00            /* type bits for plain file */
-
-/* bits in Dir.mode */
+#define O9FS_QTDIR           0x80            /* Qid type of directories */
 #define O9FS_DMDIR           0x80000000      /* mode bit for directories */
-#define O9FS_DMAPPEND        0x40000000      /* mode bit for append only files */
-#define O9FS_DMEXCL          0x20000000      /* mode bit for exclusive use files */
-#define O9FS_DMMOUNT         0x10000000      /* mode bit for mounted channel */
-#define O9FS_DMAUTH          0x08000000      /* mode bit for authentication file */
-#define O9FS_DMTMP           0x04000000      /* mode bit for non-backed-up file */
-
 #define O9FS_DMREAD          0x4             /* mode bit for read permission */
 #define O9FS_DMWRITE         0x2             /* mode bit for write permission */
 #define O9FS_DMEXEC          0x1             /* mode bit for execute permission */
@@ -175,14 +159,6 @@ enum
 #define O9FS_OWRITE	1		/* write */
 #define O9FS_ORDWR	2		/* read and write */
 #define O9FS_OEXEC	3		/* execute, == read but check execute permission */
-#define O9FS_OTRUNC	16		/* or'ed in (except for exec), truncate file first */
-#define O9FS_OCEXEC		32		/* or'ed in, close on exec */
-#define O9FS_ORCLOSE	64		/* or'ed in, remove on close */
-#define O9FS_ODIRECT	128		/* or'ed in, direct access */
-#define O9FS_ONONBLOCK	256		/* or'ed in, non-blocking call */
-#define O9FS_OEXCL		0x1000	/* or'ed in, exclusive use (create only) */
-#define O9FS_OLOCK		0x2000	/* or'ed in, lock after opening */
-#define O9FS_OAPPEND	0x4000	/* or'ed in, append only */
 
 
 #define O9FS_DIRMAX		(sizeof(struct o9fsstat)+65535U)	/* max length of o9fsstat structure */

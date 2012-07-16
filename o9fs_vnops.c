@@ -69,7 +69,7 @@ struct vops o9fs_vops = {
 	.vop_remove = eopnotsupp,
 	.vop_rename = eopnotsupp,
 	.vop_revoke = vop_generic_revoke,
-	.vop_mkdir = eopnotsupp,
+	.vop_mkdir = o9fs_mkdir,
 	.vop_rmdir = eopnotsupp,
 	.vop_setattr = eopnotsupp,
 	.vop_strategy = eopnotsupp,
@@ -143,10 +143,11 @@ o9fs_close(void *v)
 	return 0;
 }
 
+/* TODO */
 int
 o9fs_access(void *v)
-{		
-	struct vop_access_args *ap; 
+{
+	struct vop_access_args *ap;
 	struct vnode *vp;
 	mode_t a_mode;
 	struct ucred *cred;
@@ -196,13 +197,12 @@ o9fs_create(void *v)
 		return -1;
 	}
 
-	if (o9fs_opencreate2(fs, nf, O9FS_TCREATE, 0, vap->va_mode, cnp->cn_nameptr) < 0) {
+	if (o9fs_opencreate2(fs, nf, O9FS_TCREATE, 0, o9fs_utopmode(vap->va_mode), cnp->cn_nameptr) < 0) {
 		o9fs_xputfid(fs, nf);
 		DRET();
 		return -1;
 	}
 	o9fs_clunk(fs, nf);
-	o9fs_xputfid(fs, nf);
 
 	/* walk from parent dir to get an unopened fid, break create+open atomicity of 9P */
 	nf = o9fs_walk(fs, f, NULL, cnp->cn_nameptr);
@@ -340,7 +340,6 @@ o9fs_readdir(void *v)
 		DRET();
 		return ENOTDIR;
 	}
-
 	if (uio->uio_resid == 0) {
 		DRET();
 		return 0;

@@ -4,6 +4,7 @@
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/queue.h>
+#include <sys/stat.h>
 
 #include "o9fs.h"
 #include "o9fs_extern.h"
@@ -29,6 +30,9 @@ o9fs_clunk(struct o9fs *fs, struct o9fid *f)
 	DRET();
 }
 
+/*
+ * A nul newfid causes fid to be cloned both in the server and in the client.
+ */
 struct o9fid *
 o9fs_walk(struct o9fs *fs, struct o9fid *fid, struct o9fid *newfid, char *name)
 {
@@ -176,7 +180,10 @@ o9fs_rdwr2(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_
 	DRET();
 	return n;
 }
-	
+
+/*
+ * Both mode and perm are in Plan 9 convention.
+ */
 int
 o9fs_opencreate2(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
 {
