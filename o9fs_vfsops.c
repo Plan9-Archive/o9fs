@@ -244,6 +244,7 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	fp->f_count--;
 	FRELE(fp);
+	vrele(vp);
 
 	error = vflush(mp, NULL, flags);
 	if (error) {
