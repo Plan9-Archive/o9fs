@@ -184,15 +184,10 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 		return EIO;
 	printvp(VFSTOO9FS(mp)->vroot);
 
-	error = copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &len);
-	if (error)
-		return error;
-	bzero(mp->mnt_stat.f_mntonname + len, MNAMELEN - len);
-	
-	error = copyinstr(args.hostname, mp->mnt_stat.f_mntfromname, MNAMELEN - 1, &len);
-	if (error)
-		return error;
-	bzero(mp->mnt_stat.f_mntfromname + len, MNAMELEN - len);
+	bzero(mp->mnt_stat.f_mntonname, MNAMELEN);
+	strlcpy(mp->mnt_stat.f_mntonname, path, MNAMELEN);
+	bzero(mp->mnt_stat.f_mntfromname, MNAMELEN);
+	strlcpy(mp->mnt_stat.f_mntfromname, args.hostname, MNAMELEN);
 	return 0;
 }
 
@@ -243,7 +238,7 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 		flags |= FORCECLOSE;
 
 	fp->f_count--;
-	FRELE(fp);
+	FRELE(fp, p);
 	vrele(vp);
 
 	error = vflush(mp, NULL, flags);
