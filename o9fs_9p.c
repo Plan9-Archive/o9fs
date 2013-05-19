@@ -105,6 +105,8 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 {
 	long n, nstat;
 	struct o9stat *stat;
+	u_char *p;
+	uint16_t sn;
 	DIN();
 
 	if (fid == NULL) {
@@ -136,7 +138,17 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 	stat->length = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4);
 
 	/* For now the other fields are not used, so we don't bother parsing them */
-
+/*
+	p = fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8;
+	stat->name = o9fs_getstr(p, &sn);
+	p += sn+2;
+	stat->uid = o9fs_getstr(p, &sn);
+	p += sn+2;
+	stat->gid = o9fs_getstr(p, &sn);
+	p += sn+2;
+	stat->muid = o9fs_getstr(p, &sn);
+	DBG("name %s uid %s gid %s muid %s\n", stat->name, stat->uid, stat->gid, stat->muid);
+*/
 	DRET();
 	return stat;
 }

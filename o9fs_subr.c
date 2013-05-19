@@ -95,7 +95,7 @@ o9fs_putstr(char *buf, char *s)
 char *
 o9fs_getstr(char *buf)
 {
-	long n;
+	uint16_t n;
 	char *s;
 
 	if (buf == NULL)

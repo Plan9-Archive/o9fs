@@ -24,7 +24,7 @@ struct o9qid {
 struct o9stat {
 	uint16_t	type;			/* server type */
 	uint32_t	dev;			/* server subtype */
-	struct		o9qid qid;	/* unique id from server */
+	struct		o9qid qid;		/* unique id from server */
 	uint32_t	mode;			/* permissions */
 	uint32_t	atime;			/* last read time */
 	uint32_t	mtime;			/* last write time */
@@ -60,7 +60,7 @@ enum {
 	Offtag	= 5,
 
 	Minhd	= Offtag + 2,		/* Minimum 9P header size, independent of message type */
-	Maxhd	= 23,						/* Maximum 9P header size */
+	Maxhd	= 23,				/* Maximum 9P header size */
 };
 
 struct o9fs {
