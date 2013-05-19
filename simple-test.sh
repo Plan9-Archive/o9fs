@@ -17,45 +17,48 @@ fi
 testdir=$mtpt/tmp/testdir
 testfile=$testdir/test0
 
-rdir() {
-	echo Reading directory
+readdir() {
 	try ls $mtpt/net
 }
 
-rdirlong() {
-	echo Reading directory
+lreaddir() {
 	try ls -l $mtpt/net
 }
 
+create() {
+	try touch $mtpt/net/file
+}
 
+mkdir() {
+	try mkdir $mtpt/net/dir
+}
 
-rdir
-rdirlong
-exit 0
+xwrite() {
+	echo abc > .xx
+	try dd if=.xx of=$mtpt/net/dir
+	rm .xx
+}
+
+xread() {
+	try dd if=$mtpt/net/dir of=.xx
+	cat .xx
+	rm .xx
+}
+
+remove() {
+	try rm $mtpt/net/file
+}
+
+rmdir() {
+	try rmdir $mtpt/net/dir
+}
+
+readdir
+lreaddir
+create
+mkdir
+rmdir
+xwrite
+xread
+remove
 	
-readdir="ls -l $mtpt"
-readdir2="(cd $mtpt; ls -l)"
-stat="ls -ld $mtpt"
-mkdir="mkdir $testdir"
-create="touch $testfile"
-write="echo test0 > $testfile"
-read="cat $testfile"
-remove="rm $testfile"
-
-echo "o9fs mounted on $mtpt"
-echo "readdir, $readdir"
-$readdir
-echo "readdir2, $readdir2"
-$readdir2
-#echo "stat(), $stat"
-#$stat
-#echo "mkdir(), $mkdir"
-#$mkdir
-#echo "create(), $create"
-#$create
-#echo "write(), $write"
-#$write
-#echo "read(), $read"
-#$read
-#echo "remove(), $remove"
-#$remove
