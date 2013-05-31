@@ -174,7 +174,6 @@ o9fs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp
 
 	if ((fp = fd_getfile(p->p_fd, args.fd)) == NULL)
 		return EBADF;
-	fp->f_count++;
 	FREF(fp);
 
 	if (args.verbose)
@@ -237,10 +236,7 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	fp->f_count--;
-	FRELE(fp, p);
 	vrele(vp);
-
 	error = vflush(mp, NULL, flags);
 	if (error) {
 		DBG("error in vflush %d\n", error);
