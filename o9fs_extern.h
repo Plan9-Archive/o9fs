@@ -7,7 +7,7 @@ struct	o9fid *o9fs_getfid(struct o9fs *);
 void	o9fs_putfid(struct o9fs *, struct o9fid *);
 int		o9fs_ptoumode(int);
 int		o9fs_utopmode(int);
-int		o9fs_uflags2omode(int);
+int		o9fs_uflags2omode(uint32_t);
 void	*o9fsrealloc(void *, size_t, size_t);
 void	_printvp(struct vnode *);
 long	o9fs_mio(struct o9fs *, u_long);
@@ -16,7 +16,7 @@ uint32_t	o9fs_sanelen(struct o9fs *, uint32_t);
 
 /* o9fs_9p.c */
 uint32_t	o9fs_rdwr(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint64_t);
-int		o9fs_opencreate(struct o9fs *, struct o9fid *, uint8_t, uint8_t, uint32_t, char *);
+int		o9fs_opencreate(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint32_t, char *);
 struct	o9fid *o9fs_walk(struct o9fs *, struct o9fid *, struct o9fid *, char *);
 void	o9fs_clunkremove(struct o9fs *, struct o9fid *, uint8_t);
 struct	o9stat *o9fs_stat(struct o9fs *, struct o9fid *);

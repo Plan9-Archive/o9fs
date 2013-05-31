@@ -160,7 +160,7 @@ o9fs_utopmode(int mode)
 }
 
 int
-o9fs_uflags2omode(int uflags)
+o9fs_uflags2omode(uint32_t uflags)
 {
 	int omode;
 	
@@ -177,12 +177,10 @@ o9fs_uflags2omode(int uflags)
 		break;
 	}
 
-	/* XXX u9fs specific? */
 	if (uflags & O_CREAT)
 		omode |= O9FS_OEXEC;
 	if (uflags & O_TRUNC)
 		omode |= O9FS_OTRUNC;
-
 	return omode;
 }
 

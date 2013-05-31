@@ -197,7 +197,7 @@ o9fs_rdwr(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t
  * Both mode and perm are in Plan 9 convention.
  */
 int
-o9fs_opencreate(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint8_t mode, uint32_t perm, char *name)
+o9fs_opencreate(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint32_t mode, uint32_t perm, char *name)
 {
 	long n;
 	u_char *p;
