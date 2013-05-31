@@ -254,7 +254,7 @@ o9fs_read(void *v)
 	if (uio->uio_resid == 0)
 		return 0;
 
-	n = o9fs_rdwr(fs, f, O9FS_TREAD, uio->uio_resid, uio->uio_offset);
+	n = o9fs_rdwr(fs, f, O9FS_TREAD, o9fs_sanelen(fs, uio->uio_resid), uio->uio_offset);
 	if (n > 0)
 		return uiomove(fs->inbuf + Minhd + 4, n, uio);
 	return n;
@@ -344,6 +344,7 @@ o9fs_readdir(void *v)
 	buf = malloc(O9FS_DIRMAX, M_O9FS, M_WAITOK);
 
 	for (;;) {
+		len = o9fs_sanelen(fs, len);
 		nbuf = o9fsrealloc(buf, ts+O9FS_DIRMAX-n, ts+O9FS_DIRMAX);
 		buf = nbuf;
 		n = o9fs_rdwr(fs, f, O9FS_TREAD, len, f->offset);
@@ -408,9 +409,8 @@ o9fs_write(void *v)
 	struct uio *uio;
 	struct o9fid *f;
 	struct o9fs *fs;
-	int ioflag, error, msize;
+	int ioflag, error;
 	uint32_t n;
-	int64_t len;
 	off_t offset;
 	DIN();
 
@@ -427,8 +427,10 @@ o9fs_write(void *v)
 		return EINVAL;
 	}
 
-	if (uio->uio_resid == 0)
+	if (uio->uio_resid == 0) {
+		DRET();
 		return 0;
+	}
 
 	offset = uio->uio_offset;
 	if (ioflag & IO_APPEND) {
@@ -437,16 +439,22 @@ o9fs_write(void *v)
 			offset = st.st_size;
 	}
 
-	len = uio->uio_resid;
-	error = uiomove(fs->outbuf + Minhd + 4 + 8 + 4, len, uio);
-	n = o9fs_rdwr(fs, f, O9FS_TWRITE, len, offset);
+	n = o9fs_sanelen(fs, uio->uio_resid);
+	error = uiomove(fs->outbuf + Minhd + 4 + 8 + 4, n, uio);
+	if (error) {
+		DRET();
+		return -1;
+	}
+
+	n = o9fs_rdwr(fs, f, O9FS_TWRITE, n, offset);
 	if (n < 0) {
 		DRET();
 		return -1;
 	}
+
 	f->offset = offset + n;
 	DRET();
-	return error;
+	return n;
 }
 
 int

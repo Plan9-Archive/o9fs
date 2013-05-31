@@ -60,14 +60,14 @@ enum {
 	Offtag	= 5,
 
 	Minhd	= Offtag + 2,		/* Minimum 9P header size, independent of message type */
-	Maxhd	= 23,				/* Maximum 9P header size */
+	Maxhd	= 24,				/* Maximum 9P header size */
 };
 
 struct o9fs {
 	struct	mount *mp;
 	struct	vnode *vroot;		/* Local root of the tree */
 	struct	file *servfp;		/* File pointing to the server */
-	long	msize;				/* Maximum size of our payload */
+	long	msize;				/* Maximum 9P message size */
 	
 	/* 
      * Buffers for I/O
@@ -90,7 +90,6 @@ struct o9fs {
 
 #define	O9FS_NOTAG		(u_short)~0U	/* Dummy tag */
 #define	O9FS_NOFID		(uint32_t)~0U	/* Dummy fid */
-#define	O9FS_IOHDRSZ	24				/* ample room for Twrite/Rread header (iounit) */
 
 #define O9FS_GBIT8(p)	((p)[0])
 #define O9FS_GBIT16(p)	((p)[0]|((p)[1]<<8))

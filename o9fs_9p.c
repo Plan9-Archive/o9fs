@@ -152,7 +152,11 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 	DRET();
 	return stat;
 }
-	
+
+
+/*
+ * Assume len is a sanitized length
+ */
 uint32_t
 o9fs_rdwr(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t off)
 {
@@ -170,12 +174,8 @@ o9fs_rdwr(struct o9fs *fs, struct o9fid *f, uint8_t type, uint32_t len, uint64_t
 	O9FS_PBIT16(p + Offtag, o9fs_tag());
 	O9FS_PBIT32(p + Minhd, f->fid);
 	O9FS_PBIT64(p + Minhd + 4, off);
-	if (f->iounit > 0 && len > f->iounit)
-		len = f->iounit;
-	if (len > fs->msize)
-		len = fs->msize - O9FS_IOHDRSZ;
-
 	O9FS_PBIT32(p + Minhd + 4 + 8, len);
+
 	p += Minhd + 4 + 8 + 4;
 	if (type == O9FS_TWRITE)
 		p += len;

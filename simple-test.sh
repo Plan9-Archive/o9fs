@@ -1,21 +1,13 @@
-#!/bin/sh
-
-if [[ $1 == "-v" ]]; then
-	try() {
-		$* || exit $?
-    }
-	shift
-else
-	try() {
-		$* >/dev/null 2>&1 || exit $?
-    }
-fi
-
+#!/bin/ksh
 
 [[ -z $1 ]] && mtpt=/mnt || mtpt="$1"
 
 testdir=$mtpt/tmp/testdir
-testfile=$testdir/test0
+testfile=$testdir/file0
+
+try() {
+	$* || exit 1 
+}
 
 domount() {
 	try mount/mount_o9fs '10.0.2.1!5648' $mtpt
@@ -62,14 +54,14 @@ rmdir() {
 }
 
 domount
-mkdir
-create
-readdir
-lreaddir
-xwrite
-xread
-remove
-readdir
-lreaddir
-rmdir
-dounmount
+#mkdir
+#create
+#readdir
+#lreaddir
+#xwrite
+#xread
+#remove
+#readdir
+#lreaddir
+#rmdir
+#dounmount

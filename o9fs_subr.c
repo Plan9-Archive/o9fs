@@ -290,3 +290,10 @@ o9fs_tag(void)
 	return (uint16_t)arc4random()%0xFFFF;
 }
 
+uint32_t
+o9fs_sanelen(struct o9fs *fs, uint32_t n)
+{
+	if (n > fs->msize - Maxhd)
+		n = fs->msize - Maxhd;
+	return n;
+}

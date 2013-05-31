@@ -12,6 +12,7 @@ void	*o9fsrealloc(void *, size_t, size_t);
 void	_printvp(struct vnode *);
 long	o9fs_mio(struct o9fs *, u_long);
 uint16_t	o9fs_tag(void);
+uint32_t	o9fs_sanelen(struct o9fs *, uint32_t);
 
 /* o9fs_9p.c */
 uint32_t	o9fs_rdwr(struct o9fs *, struct o9fid *, uint8_t, uint32_t, uint64_t);

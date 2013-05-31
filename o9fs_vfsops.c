@@ -35,14 +35,14 @@ struct o9fid *o9fs_attach(struct o9fs *, struct o9fid *, char *, char *);
 
 		
 	
-static long
+static uint32_t
 o9fs_version(struct o9fs *fs, uint32_t msize)
 {
 	long n;
 	u_char *p;
 
 	if (fs == NULL)
-		return -1;
+		return 0;
 
 	p = fs->outbuf;
 
@@ -54,8 +54,8 @@ o9fs_version(struct o9fs *fs, uint32_t msize)
 
 	n = o9fs_mio(fs, 19);
 	if (n <= 0)
-		return -1;
-	return fs->msize = O9FS_GBIT16(fs->inbuf + Minhd);
+		return 0;
+	return O9FS_GBIT16(fs->inbuf + Minhd);
 }	
 
 struct o9fid *
@@ -133,6 +133,7 @@ mounto9fs(struct mount *mp, struct file *fp)
 	struct o9fs *fs;
 	struct vnode *rvp;
 	struct o9fid *fid;
+	uint32_t msize;
 
 	fs = (struct o9fs *) malloc(sizeof(struct o9fs), M_MISCFSMNT, M_WAITOK | M_ZERO);
 	fs->mp = mp;
@@ -146,12 +147,14 @@ mounto9fs(struct mount *mp, struct file *fp)
 	TAILQ_INIT(&fs->freeq);
 	fs->nextfid = 0;	
 
-	if(o9fs_version(fs, 8192+O9FS_IOHDRSZ) < 0)
+	msize = o9fs_version(fs, 8192+Maxhd);
+	if (msize < Maxhd)
 		return EIO;
+	fs->msize = msize;
 
 	fid = o9fs_attach(fs, o9fs_auth(fs, "none", ""), "iru", "");
 	if (fid == NULL)
-		return EIO;	
+		return EIO;
 
 	return o9fs_allocvp(fs->mp, fid, &fs->vroot, VROOT);
 }
