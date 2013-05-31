@@ -1,24 +1,14 @@
-tgz: 
-	(cd .. && tar zcvf o9fs.tgz o9fs/ && sync)
-
-kern:
-	(cd /sys/arch/i386/compile/GENERIC && sudo sh -c "make && cp bsd /usr/iru/src/gsoc07/testing/bsd")
-
-CFLAGS+=-DDEBUG
+LKM=o9fs
+COMBINED=$(LKM).o
 NOMAN=
-LKM=\
-	o9fs_9p\
-	o9fs_convM2D\
-	o9fs_lkm\
-	o9fs_subr\
-	o9fs_vfsops\
-	o9fs_vnops
-COMBINED=o9fs.o
-l: $(COMBINED)
-	modload -o o9fs $(COMBINED)
 
-u:
-	modunload -n o9fs
+SRCS=\
+	o9fs_9p.c\
+	o9fs_convM2D.c\
+	o9fs_lkm.c\
+	o9fs_subr.c\
+	o9fs_vfsops.c\
+	o9fs_vnops.c
 
 .include <bsd.lkm.mk>
 
