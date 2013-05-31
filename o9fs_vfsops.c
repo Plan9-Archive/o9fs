@@ -236,7 +236,6 @@ o9fs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	vrele(vp);
 	error = vflush(mp, NULL, flags);
 	if (error) {
 		DBG("error in vflush %d\n", error);
