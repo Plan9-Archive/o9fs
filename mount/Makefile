@@ -2,9 +2,8 @@
 
 PROG=	mount_o9fs
 SRCS=	mount_o9fs.c getmntopts.c
-MAN=	mount_o9fs.8
+NOMAN=
 
-#MOUNT=	${.CURDIR}/../mount
 MOUNT= /usr/src/sbin/mount
 CFLAGS+= -I${MOUNT} -I..
 .PATH:	${MOUNT}
