@@ -23,3 +23,6 @@ All numeric variables should have sized types, i.e. uint32_t instead of long
 Rename
 Change the fid allocation routines. Use pool(9)?
 Can we be sure to have a 1:1 mapping between o9fid and vnode?
+
+Need to have at least rev1.24 of /usr/share/mk/bsd.lkm.mk to build.
+i386 only. amd64 dies with out of KVA space when loading.

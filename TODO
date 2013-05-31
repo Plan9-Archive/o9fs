@@ -1,9 +1,9 @@
-- remove, wstat
-- locking
-- refcounting fids
-- add options to mount: noauth, auth as other user, port, aname
+- Unmount only works when forced.
+- Readdir doesn't return dot and dotdot
+- Implement wstat
+- Add options to mount: noauth, auth as other user, port, aname
+
 - v9fs pass the fcall up to the functions instead of bcopying data (as in Tread) like us
 
 known bugs:
-cannot unmount
 read/write crashes with len > 1024

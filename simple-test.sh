@@ -17,48 +17,59 @@ fi
 testdir=$mtpt/tmp/testdir
 testfile=$testdir/test0
 
+domount() {
+	try mount/mount_o9fs '10.0.2.1!5648' $mtpt
+}
+
+dounmount() {
+	try umount $mtpt
+}
+
 readdir() {
-	try ls $mtpt/net
+	try ls $testdir
 }
 
 lreaddir() {
-	try ls -l $mtpt/net
+	try ls -l $testdir
 }
 
 create() {
-	try touch $mtpt/net/file
+	>$testfile
 }
 
 mkdir() {
-	try mkdir $mtpt/net/dir
+	try mkdir $testdir
 }
 
 xwrite() {
 	echo abc > .xx
-	try dd if=.xx of=$mtpt/net/dir
+	try dd if=.xx of=$testfile
 	rm .xx
 }
 
 xread() {
-	try dd if=$mtpt/net/dir of=.xx
+	try dd if=$testfile of=.xx
 	cat .xx
 	rm .xx
 }
 
 remove() {
-	try rm $mtpt/net/file
+	try rm $testfile
 }
 
 rmdir() {
-	try rmdir $mtpt/net/dir
+	try rmdir $testdir
 }
 
+domount
+mkdir
+create
 readdir
 lreaddir
-create
-mkdir
-rmdir
 xwrite
 xread
 remove
-	
+readdir
+lreaddir
+rmdir
+dounmount
