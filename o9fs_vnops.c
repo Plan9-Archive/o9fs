@@ -576,17 +576,17 @@ o9fs_getattr(void *v)
 	vap->va_gid = 0;
 	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
 	vap->va_size = stat->length;
-	vap->va_blocksize = VFSTOO9FS(vp->v_mount)->msize;
+	vap->va_blocksize = VFSTOO9FS(vp->v_mount)->msize - Maxhd;
 	vap->va_atime.tv_sec = stat->atime;
 	vap->va_mtime.tv_sec = stat->mtime;
 	vap->va_ctime.tv_sec = stat->atime;
-	vap->va_gen = 0;
+	vap->va_gen = 1;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
-	vap->va_bytes = 0;
+	vap->va_bytes = stat->length;
 	vap->va_type = vp->v_type;
 	vap->va_mode = o9fs_permtou(stat->mode);
-	vap->va_nlink = 0;
+	vap->va_nlink = 1;
 	vap->va_fileid = f->qid.path;	/* qid.path is 64bit, va_fileid 32bit */
 	vap->va_filerev = f->qid.vers;
 
