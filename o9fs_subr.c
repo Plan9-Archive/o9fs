@@ -137,7 +137,7 @@ o9fs_allocvp(struct mount *mp, struct o9fid *f, struct vnode **vpp, u_long flag)
 }
 
 int
-o9fs_ptoumode(int mode)
+o9fs_permtou(int mode)
 {
 	int umode;
 	
@@ -148,7 +148,7 @@ o9fs_ptoumode(int mode)
 }
 
 int
-o9fs_utopmode(int mode)
+o9fs_utoperm(int mode)
 {
 	int pmode;
 
@@ -160,26 +160,26 @@ o9fs_utopmode(int mode)
 }
 
 int
-o9fs_uflags2omode(uint32_t uflags)
+o9fs_uflags2omode(uint32_t flags)
 {
 	int omode;
-	
+
 	omode = 0;
-	switch(uflags & O_ACCMODE) {
-	case FREAD:
+	flags = OFLAGS(flags);
+
+	switch (flags & O_ACCMODE) {
+	case O_RDONLY:
 		omode = O9FS_OREAD;
 		break;
-	case FWRITE:
+	case O_WRONLY:
 		omode = O9FS_OWRITE;
 		break;
-	case (FREAD|FWRITE):
+	case O_RDWR:
 		omode = O9FS_ORDWR;
 		break;
 	}
 
-	if (uflags & O_CREAT)
-		omode |= O9FS_OEXEC;
-	if (uflags & O_TRUNC)
+	if (flags & O_TRUNC)
 		omode |= O9FS_OTRUNC;
 	return omode;
 }

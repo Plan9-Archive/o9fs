@@ -191,7 +191,7 @@ o9fs_create(void *v)
 		return -1;
 	}
 
-	if (o9fs_opencreate(fs, nf, O9FS_TCREATE, 0, o9fs_utopmode(vap->va_mode), cnp->cn_nameptr) < 0) {
+	if (o9fs_opencreate(fs, nf, O9FS_TCREATE, 0, vap->va_mode, cnp->cn_nameptr) < 0) {
 		o9fs_putfid(fs, nf);
 		DRET();
 		return -1;
@@ -454,7 +454,7 @@ o9fs_write(void *v)
 
 	f->offset = offset + n;
 	DRET();
-	return n;
+	return 0;
 }
 
 int
@@ -585,7 +585,7 @@ o9fs_getattr(void *v)
 	vap->va_rdev = 0;
 	vap->va_bytes = 0;
 	vap->va_type = vp->v_type;
-	vap->va_mode = o9fs_ptoumode(stat->mode);
+	vap->va_mode = o9fs_permtou(stat->mode);
 	vap->va_nlink = 0;
 	vap->va_fileid = f->qid.path;	/* qid.path is 64bit, va_fileid 32bit */
 	vap->va_filerev = f->qid.vers;

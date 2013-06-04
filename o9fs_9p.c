@@ -137,7 +137,7 @@ o9fs_stat(struct o9fs *fs, struct o9fid *fid)
 	stat->mtime = O9FS_GBIT32(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4);
 	stat->length = O9FS_GBIT64(fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4);
 
-	/* For now the other fields are not used, so we don't bother parsing them */
+	/* So far the other fields are not used, don't bother parsing them */
 /*
 	p = fs->inbuf + Minhd + 2 + 2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8;
 	stat->name = o9fs_getstr(p, &sn);
@@ -201,7 +201,7 @@ o9fs_opencreate(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint32_t mode,
 {
 	long n;
 	u_char *p;
-	uint8_t omode;
+	uint32_t omode;
 	DIN();
 
 	if (fid == NULL) {
@@ -221,7 +221,7 @@ o9fs_opencreate(struct o9fs *fs, struct o9fid *fid, uint8_t type, uint32_t mode,
 			return -1;
 		}
 		p = o9fs_putstr(p, name);
-		O9FS_PBIT32(p, perm);
+		O9FS_PBIT32(p, o9fs_utoperm(perm));
 		p += 4;
 	}
 	omode = o9fs_uflags2omode(mode);
