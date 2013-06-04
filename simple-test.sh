@@ -1,67 +1,42 @@
-#!/bin/ksh
+#!/bin/sh
+
+set -x
 
 [[ -z $1 ]] && mtpt=/mnt || mtpt="$1"
 
 testdir=$mtpt/tmp/testdir
 testfile=$testdir/file0
 
-try() {
-	$* || exit 1 
-}
+mount/mount_o9fs '10.0.2.1!5648' $mtpt || exit 1
 
-domount() {
-	try mount/mount_o9fs '10.0.2.1!5648' $mtpt
-}
+mkdir $testdir || exit 1
+ls -al $testdir || exit 1
+touch $testfile || exit 1
+echo abc > .xx || exit 1
+cat .xx > $testfile || exit 1
+cat $testfile > .xx2 || exit 1
+cmp .xx .xx2 || exit 1
+rm .xx .xx2 || exit 1
+rm $testfile || exit 1
+rmdir $testdir || exit 1
+umount -f $mtpt || exit 1
 
-dounmount() {
-	try umount $mtpt
-}
 
-readdir() {
-	try ls $testdir
-}
+testdir=./testdir
+testfile=./file0
 
-lreaddir() {
-	try ls -l $testdir
-}
-
-create() {
-	>$testfile
-}
-
-mkdir() {
-	try mkdir $testdir
-}
-
-xwrite() {
-	echo abc > .xx
-	try dd if=.xx of=$testfile
-	rm .xx
-}
-
-xread() {
-	try dd if=$testfile of=.xx
-	cat .xx
-	rm .xx
-}
-
-remove() {
-	try rm $testfile
-}
-
-rmdir() {
-	try rmdir $testdir
-}
-
-domount
-#mkdir
-#create
-#readdir
-#lreaddir
-#xwrite
-#xread
-#remove
-#readdir
-#lreaddir
-#rmdir
-#dounmount
+mount/mount_o9fs '10.0.2.1!5648' $mtpt || exit 1
+cd $mtpt/tmp
+mkdir $testdir || exit 1
+cd $testdir || exit 1
+ls -al || exit 1
+touch $testfile || exit 1
+echo abc > /tmp/.xx || exit 1
+cat /tmp/.xx > $testfile || exit 1
+cat $testfile > /tmp/.xx2 || exit 1
+cmp /tmp/.xx /tmp/.xx2 || exit 1
+rm /tmp/.xx /tmp/.xx2 || exit 1
+rm $testfile || exit 1
+cd .. || exit 1
+rmdir $testdir || exit 1
+umount -f $mtpt || exit 1

@@ -1,5 +1,10 @@
 - Unmount only works when forced.
 - Readdir doesn't return dot and dotdot.
 - Implement wstat.
+- Implement rename.
 - Add options to mount: noauth, auth as other user, port, aname.
 - Only copy data when strictly necessary.
+- All numeric variables should have sized types, i.e. uint32_t instead of long.
+- Use pool(9) to allocate fids?
+
+- halt if . is a o9fs mounted dir panics.
