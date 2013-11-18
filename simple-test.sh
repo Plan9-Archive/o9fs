@@ -15,6 +15,7 @@ dounmount() {
 
 cwd=`pwd`
 
+echo -n 1...
 {
 	testdir=$mtpt/tmp/testdir
 	testfile=$testdir/file0	
@@ -40,7 +41,8 @@ def
 	dounmount
 	cd $cwd
 }
-
+echo ok
+echo -n 2...
 {
 	testdir=./testdir
 	testfile=./file0
@@ -61,7 +63,8 @@ def
 	dounmount
 	cd $cwd
 }
-
+echo ok
+echo -n 3...
 {
 	testdir=$mtpt/tmp/testdir
 	testfile=$testdir/file0
@@ -72,5 +75,6 @@ def
 	dounmount
 	cd $cwd
 }
+echo ok
 
 
